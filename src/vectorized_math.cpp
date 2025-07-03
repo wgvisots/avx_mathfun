@@ -1,0 +1,277 @@
+/*
+  Copyright (C) 2025 W. Greg Visotski
+
+  This software is provided 'as-is', without any express or implied
+  warranty.  In no event will the authors be held liable for any damages
+  arising from the use of this software.
+
+  Permission is granted to anyone to use this software for any purpose,
+  including commercial applications, and to alter it and redistribute it
+  freely, subject to the following restrictions:
+
+  1. The origin of this software must not be misrepresented; you must not
+     claim that you wrote the original software. If you use this software
+     in a product, an acknowledgment in the product documentation would be
+     appreciated but is not required.
+  2. Altered source versions must be plainly marked as such, and must not be
+     misrepresented as being the original software.
+  3. This notice may not be removed or altered from any source distribution.
+
+  (this is the zlib license)
+*/
+
+#include <cassert>
+
+#include <immintrin.h>
+
+#include "Aligned.h"
+#include "vectorized_math.h"
+
+namespace{
+    inline std::size_t doVectorizedMultiply(float* RESTRICT io, const __m256& mul , const std::size_t size){
+        assert(size >= 64);
+        //    ALIGN32_BEG __m256 mul ALIGN32_END;
+        ALIGN32_BEG __m256 f0  ALIGN32_END;
+        ALIGN32_BEG __m256 f1  ALIGN32_END;
+        ALIGN32_BEG __m256 f2  ALIGN32_END;
+        ALIGN32_BEG __m256 f3  ALIGN32_END;
+        ALIGN32_BEG __m256 f4  ALIGN32_END;
+        ALIGN32_BEG __m256 f5  ALIGN32_END;
+        ALIGN32_BEG __m256 f6  ALIGN32_END;
+        ALIGN32_BEG __m256 f7  ALIGN32_END;
+
+        const std::size_t stop = size - 64;
+        std::size_t i = 0;
+        for (; i < stop; i += 64)
+        {
+            f0 = _mm256_load_ps(io + i + 0);
+            f1 = _mm256_load_ps(io + i + 8);
+            f2 = _mm256_load_ps(io + i + 16);
+            f3 = _mm256_load_ps(io + i + 24);
+            f4 = _mm256_load_ps(io + i + 32);
+            f5 = _mm256_load_ps(io + i + 40);
+            f6 = _mm256_load_ps(io + i + 48);
+            f7 = _mm256_load_ps(io + i + 56);
+
+            f0 = _mm256_mul_ps(f0, mul);
+            f1 = _mm256_mul_ps(f1, mul);
+            f2 = _mm256_mul_ps(f2, mul);
+            f3 = _mm256_mul_ps(f3, mul);
+            f4 = _mm256_mul_ps(f4, mul);
+            f5 = _mm256_mul_ps(f5, mul);
+            f6 = _mm256_mul_ps(f6, mul);
+            f7 = _mm256_mul_ps(f7, mul);
+
+            _mm256_store_ps(io + i + 0, f0);
+            _mm256_store_ps(io + i + 8, f1);
+            _mm256_store_ps(io + i + 16, f2);
+            _mm256_store_ps(io + i + 24, f3);
+            _mm256_store_ps(io + i + 32, f4);
+            _mm256_store_ps(io + i + 40, f5);
+            _mm256_store_ps(io + i + 48, f6);
+            _mm256_store_ps(io + i + 56, f7);
+        }
+        return i;
+    }
+
+}
+void vectorized::shortToFloat(const std::int16_t * RESTRICT in, float * RESTRICT out, const std::size_t length){
+    std::size_t i{0};
+    if(length > 64){
+        const std::size_t stop{length - 64};
+        for(i = 0; i < stop; i += 64)
+        {
+            //done like this so the compiler will unroll the inner loop for us
+            for(int j = 0; j < 64; j += 16)
+            {
+                __m256i in0 = _mm256_load_si256((const __m256i *)(in + i + j));
+                __m128i in1 = _mm256_extracti128_si256(in0, 0);
+                __m128i in2 = _mm256_extracti128_si256(in0, 1);
+                __m256i tmp1 = _mm256_cvtepi16_epi32(in1);
+                __m256i tmp2 = _mm256_cvtepi16_epi32(in2);
+                __m256  out1 = _mm256_cvtepi32_ps(tmp1);
+                __m256  out2 = _mm256_cvtepi32_ps(tmp2);
+                _mm256_store_ps(out + i + j + 0, out1);
+                _mm256_store_ps(out + i + j + 8, out2);
+            }
+        }
+        _mm256_zeroupper();
+    }
+    for(; i < length; i++)
+    {
+        out[i] = (float)in[i];
+    }
+
+}
+
+void vectorized::floatToShort(const float * RESTRICT in, std::int16_t * RESTRICT out, const std::size_t length){
+    std::size_t i{0};
+    if(length > 16){
+        ALIGN32_BEG __m256  in0  ALIGN32_END;
+        ALIGN32_BEG __m256  in1  ALIGN32_END;
+        ALIGN32_BEG __m256i out0 ALIGN32_END;
+        ALIGN32_BEG __m256i out1 ALIGN32_END;
+
+        const std::size_t stop{length - 16};
+
+        for(i = 0; i < stop; i += 16)
+        {
+            in0 = _mm256_load_ps(in + i + 0);              //read float 0-7
+            in1 = _mm256_load_ps(in + i + 8);              //read float 8-15
+            out0 = _mm256_cvttps_epi32(in0);               //convert to int
+            out1 = _mm256_cvttps_epi32(in1);               //convert to int
+
+            out0 = _mm256_packs_epi32(out0, out1);         //pack integers as saturated shorts (packed in this order: 0, 1, 2, 3, 8, 9, 10, 11, 4, 5, 6, 7, 12, 13, 14, 15)
+            out0 = _mm256_permute4x64_epi64(out0, 0XD8);   //shuffle to 0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15
+
+            _mm256_store_si256((__m256i *)(out + i), out0); //store
+        }
+    }
+    for(; i < length; i++)
+    {
+        out[i] = (short)in[i];
+    }
+
+}
+
+void vectorized::multiply(  float* RESTRICT io, const float num,  const std::size_t size){
+    ALIGN32_BEG __m256 mul ALIGN32_END;
+
+    mul = _mm256_broadcast_ss(&num);
+    std::size_t i = doVectorizedMultiply(io, mul, size);
+    _mm256_zeroupper();
+
+    for (; i < size; i++){
+        io[i] = io[i] * num;
+    }
+}
+
+void vectorized::multiplyIQ(float* RESTRICT io,  float ival,  float qval,  std::size_t size){
+    std::unique_ptr<float> mulArrayPtr{aligned::allocateAligned<float>(aligned::Alignment::AVX, 8)};
+    float* mulArray = mulArrayPtr.get();
+    mulArray[0] = ival;
+    mulArray[1] = qval;
+    mulArray[2] = ival;
+    mulArray[3] = qval;
+    mulArray[4] = ival;
+    mulArray[5] = qval;
+    mulArray[6] = ival;
+    mulArray[7] = qval;
+
+    std::size_t i = doVectorizedMultiply(io, *((__m256*)(&mulArray[0])), size);
+    _mm256_zeroupper();
+    for(; i < size; i+= 2){
+        io[i]   *= ival;
+        io[i+1] *= qval;
+    }
+
+}
+
+void vectorized::add(std::int16_t* RESTRICT io, const std::int16_t* RESTRICT second,  std::size_t size){
+    std::size_t i = 0;
+    const std::size_t stop = size - 32;
+    for (; i <= stop; i += 32)
+    {
+        __m256i ini0 = _mm256_load_si256((__m256i *)(io + i + 0));
+        __m256i ini1 = _mm256_load_si256((__m256i *)(io + i + 16));
+        __m256i ins0 = _mm256_load_si256((const __m256i *)(second + i + 0));
+        __m256i ins1 = _mm256_load_si256((const __m256i *)(second + i + 16));
+
+        ini0 = _mm256_adds_epi16(ini0, ins0);
+        ini1 = _mm256_adds_epi16(ini1, ins1);
+
+        _mm256_store_si256((__m256i *)(io + i + 0), ini0);
+        _mm256_store_si256((__m256i *)(io + i + 16), ini1);
+    }
+    _mm256_zeroupper();
+    for (; i < size; i++)
+    {
+        io[i] = (int16_t)std::min(io[i] + second[i], (int)std::numeric_limits<int16_t>::max());
+    }
+
+}
+
+void vectorized::addUNA(std::int16_t* RESTRICT io, const std::int16_t* RESTRICT second,  std::size_t size){
+    std::size_t i = 0;
+    const std::size_t stop = size - 32;
+    for (; i <= stop; i += 32)
+    {
+        __m256i ini0 = _mm256_loadu_si256((__m256i *)(io + i + 0));
+        __m256i ini1 = _mm256_loadu_si256((__m256i *)(io + i + 16));
+        __m256i ins0 = _mm256_loadu_si256((const __m256i *)(second + i + 0));
+        __m256i ins1 = _mm256_loadu_si256((const __m256i *)(second + i + 16));
+
+        ini0 = _mm256_adds_epi16(ini0, ins0);
+        ini1 = _mm256_adds_epi16(ini1, ins1);
+
+        _mm256_storeu_si256((__m256i *)(io + i + 0), ini0);
+        _mm256_storeu_si256((__m256i *)(io + i + 16), ini1);
+    }
+    _mm256_zeroupper();
+    for (; i < size; i++)
+    {
+        io[i] = (int16_t)std::min(io[i] + second[i], (int)std::numeric_limits<int16_t>::max());
+    }
+}
+
+void vectorized::add(float* RESTRICT io, const float* RESTRICT second,  std::size_t size){
+    std::size_t i = 0;
+    const std::size_t stop = size - 32;
+    for(; i <= stop; i += 32)
+    {
+        __m256 ini0 = _mm256_load_ps(io     + i +  0);
+        __m256 ini1 = _mm256_load_ps(io     + i +  8);
+        __m256 ini2 = _mm256_load_ps(io     + i + 16);
+        __m256 ini3 = _mm256_load_ps(io     + i + 24);
+        __m256 ins0 = _mm256_load_ps(second + i +  0);
+        __m256 ins1 = _mm256_load_ps(second + i +  8);
+        __m256 ins2 = _mm256_load_ps(second + i + 16);
+        __m256 ins3 = _mm256_load_ps(second + i + 24);
+
+        ini0 = _mm256_add_ps(ini0, ins0);
+        ini1 = _mm256_add_ps(ini1, ins1);
+        ini2 = _mm256_add_ps(ini2, ins2);
+        ini3 = _mm256_add_ps(ini3, ins3);
+
+        _mm256_store_ps(io + i +  0, ini0);
+        _mm256_store_ps(io + i +  8, ini1);
+        _mm256_store_ps(io + i + 16, ini2);
+        _mm256_store_ps(io + i + 24, ini3);
+    }
+    _mm256_zeroupper();
+    for(; i < size; i++)
+    {
+        io[i] = io[i] + second[i];
+    }
+}
+
+void vectorized::addUNA(float* RESTRICT io, const float* RESTRICT second, std::size_t size){
+    std::size_t i = 0;
+    const std::size_t stop = size - 32;
+    for(; i <= stop; i += 32)
+    {
+        __m256 ini0 = _mm256_loadu_ps(io     + i +  0);
+        __m256 ini1 = _mm256_loadu_ps(io     + i +  8);
+        __m256 ini2 = _mm256_loadu_ps(io     + i + 16);
+        __m256 ini3 = _mm256_loadu_ps(io     + i + 24);
+        __m256 ins0 = _mm256_loadu_ps(second + i +  0);
+        __m256 ins1 = _mm256_loadu_ps(second + i +  8);
+        __m256 ins2 = _mm256_loadu_ps(second + i + 16);
+        __m256 ins3 = _mm256_loadu_ps(second + i + 24);
+
+        ini0 = _mm256_add_ps(ini0, ins0);
+        ini1 = _mm256_add_ps(ini1, ins1);
+        ini2 = _mm256_add_ps(ini2, ins2);
+        ini3 = _mm256_add_ps(ini3, ins3);
+
+        _mm256_storeu_ps(io + i +  0, ini0);
+        _mm256_storeu_ps(io + i +  8, ini1);
+        _mm256_storeu_ps(io + i + 16, ini2);
+        _mm256_storeu_ps(io + i + 24, ini3);
+    }
+    _mm256_zeroupper();
+    for(; i < size; i++)
+    {
+        io[i] = io[i] + second[i];
+    }
+}

@@ -25,7 +25,7 @@
 
 namespace aligned{
 
-    enum Alignment : size_t
+    enum class Alignment : std::size_t
     {
         Normal = sizeof(void*),
         SSE    = 16,
@@ -36,7 +36,7 @@ namespace aligned{
     /**
      * Just a stupid simple allocator to get aligned memory for a std::vector
      *
-     * TODO -> maybe do something cool like described here:
+     * Future -> maybe do something cool like described here:
      * https://indiegamedev.net/2022/03/27/custom-c20-memory-allocators-for-stl-containers/
      *
      * @tparam T
@@ -45,9 +45,9 @@ namespace aligned{
     template<typename T, aligned::Alignment ALIGNMENT_TYPE = aligned::Alignment::AVX>
     class AlignedAllocator{
     public:
-        static_assert(ALIGNMENT_TYPE >= alignof(T), "You may be violating minimum alignment requirements.");
+        static_assert((std::size_t)ALIGNMENT_TYPE >= alignof(T), "You may be violating minimum alignment requirements.");
         using value_type = T;
-        static std::align_val_t constexpr ALIGNMENT{ALIGNMENT_TYPE};
+        static std::align_val_t constexpr ALIGNMENT{(std::align_val_t)ALIGNMENT_TYPE};
 
         /**
          * @see https://stackoverflow.com/a/48062758/2191065
@@ -61,13 +61,13 @@ namespace aligned{
         constexpr AlignedAllocator( const AlignedAllocator& ) noexcept = default;
 
         template<typename U>
-        constexpr AlignedAllocator( AlignedAllocator<U, ALIGNMENT_TYPE> const& ) noexcept{}
+        constexpr explicit AlignedAllocator( AlignedAllocator<U, ALIGNMENT_TYPE> const& ) noexcept{}
 
         [[nodiscard]] constexpr T* allocate(std::size_t n){
             if ( n > (std::numeric_limits<std::size_t>::max() / sizeof(T))){
                 throw std::bad_array_new_length();
             }
-            return reinterpret_cast<T*>(::operator new[](n * sizeof(T), ALIGNMENT));
+            return static_cast<T*>(::operator new[](n * sizeof(T), ALIGNMENT));
         }
 
         void deallocate(T* allocatedPointer, [[maybe_unused]] std::size_t n)

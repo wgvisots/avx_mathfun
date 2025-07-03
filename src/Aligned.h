@@ -50,10 +50,10 @@ namespace aligned
 #define RESTRICT __restrict__
 #define ALWAYS_INLINE __attribute__ ((always_inline))
     template<typename T>
-    inline T *allocateAligned(const unsigned int align, const std::size_t numElements){
-        size_t len = numElements * sizeof(T);
-        len = len + (align - (len % align));
-        return (T *) aligned_alloc(align, len);
+    inline T *allocateAligned(const aligned::Alignment align, const std::size_t numElements){
+        std::size_t len = numElements * sizeof(T);
+        len = len + ((std::size_t)align - (len % (std::size_t)align));
+        return (T *) std::aligned_alloc((std::size_t)align, len);
     }
 
     template<typename T>

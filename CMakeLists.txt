@@ -22,21 +22,29 @@
 
 cmake_minimum_required(VERSION 3.20)
 
-set(PROJ thing_apps)
+set(PROJ mathfun)
 project(${PROJ})
 
 set(CMAKE_CXX_STANDARD 20)
 
-set(CMAKE_CXX_FLAGS "-FPIC -fopenmp -Wall -Wextra -Wpedantic -g -pg ${O_FLAG}")
+set(O_FLAG "-O0")
+set(MATH_FLAG "-mavx2")
+
+set(CMAKE_CXX_FLAGS "-FPIC -fopenmp ${MATH_FLAG} -Wall -Wextra -Wpedantic -g -pg ${O_FLAG}")
 
 set(INC_DIRS "./src" )
+file(GLOB LIB_SRCS "./src/*.cpp")
 
-set(LIBS pthread )
+set(LIBS "pthread" )
+
+add_library(${PROJ} ${LIB_SRCS})
+target_include_directories(${PROJ} PUBLIC ${INC_DIRS})
+target_link_libraries(${PROJ} ${LIBS})
 
 set(APPS "test_main")
 
 foreach (APP ${APPS})
     add_executable(${APP} "test/${APP}.cpp")
     target_include_directories(${APP} PUBLIC ${INC_DIRS})
-    target_link_libraries(${APP} ${LIBS})
+    target_link_libraries(${APP} ${LIBS} ${PROJ})
 endforeach ()

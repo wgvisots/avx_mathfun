@@ -26,7 +26,7 @@
 #include "Aligned.h"
 
 int main(){
-    std::size_t* thing = aligned::allocateAligned<std::size_t>(32, 10);
+    std::size_t* thing = aligned::allocateAligned<std::size_t>(aligned::Alignment::AVX, 10);
     std::cout << (0 == ((std::uint64_t)thing % 32)) << std::endl;
 
     using allocator = aligned::AlignedAllocator<std::size_t, aligned::Alignment::AVX>;
