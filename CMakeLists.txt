@@ -41,10 +41,13 @@ add_library(${PROJ} ${LIB_SRCS})
 target_include_directories(${PROJ} PUBLIC ${INC_DIRS})
 target_link_libraries(${PROJ} ${LIBS})
 
-set(APPS "test_main")
-
-foreach (APP ${APPS})
-    add_executable(${APP} "test/${APP}.cpp")
-    target_include_directories(${APP} PUBLIC ${INC_DIRS})
-    target_link_libraries(${APP} ${LIBS} ${PROJ})
-endforeach ()
+enable_testing()
+add_subdirectory(test)
+#
+#set(APPS "test_main")
+#
+#foreach (APP ${APPS})
+#    add_executable(${APP} "test/${APP}.cpp")
+#    target_include_directories(${APP} PUBLIC ${INC_DIRS})
+#    target_link_libraries(${APP} ${LIBS} ${PROJ})
+#endforeach ()

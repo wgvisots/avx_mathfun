@@ -34,9 +34,9 @@
 #include <immintrin.h>
 
 #include "Aligned.h" //wgvisots - this is to provide ALIGN32_BEG/ALIGN32_end
+
+
 /* yes I know, the top of this file is quite ugly */
-//# define ALIGN32_BEG //wgvisots - commented out
-//# define ALIGN32_END __attribute__((aligned(32))) //wgvisots - commented out
 
 namespace avx_mathfun{ //wgvisots
 
@@ -729,4 +729,20 @@ inline void sincos256_ps(v8sf x, v8sf *s, v8sf *c) {
   *c = _mm256_xor_ps(xmm2, sign_bit_cos);
 }
 
+//TODO -> make this faster!!!
+//wgvisots
+inline void atan2(const __m256 &a, const __m256 &b, __m256 &c){
+    float *aArray = (float*)&a;
+    float *bArray = (float*)&b;
+    float *cArray = (float*)&c;
+
+    cArray[0] = std::atan2(aArray[0], aArray[1]);
+    cArray[1] = std::atan2(aArray[2], aArray[3]);
+    cArray[2] = std::atan2(bArray[0], bArray[1]);
+    cArray[3] = std::atan2(bArray[2], bArray[3]);
+    cArray[4] = std::atan2(aArray[4], aArray[5]);
+    cArray[5] = std::atan2(aArray[6], aArray[7]);
+    cArray[6] = std::atan2(bArray[4], bArray[5]);
+    cArray[7] = std::atan2(bArray[6], bArray[7]);
+}
 }

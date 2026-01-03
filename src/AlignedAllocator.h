@@ -20,8 +20,12 @@
   (this is the zlib license)
 */
 
+#pragma once
+
 #include <cstdlib>
+#include <iostream>
 #include <memory>
+#include <limits>
 
 namespace aligned{
 
@@ -45,9 +49,9 @@ namespace aligned{
     template<typename T, aligned::Alignment ALIGNMENT_TYPE = aligned::Alignment::AVX>
     class AlignedAllocator{
     public:
-        static_assert((std::size_t)ALIGNMENT_TYPE >= alignof(T), "You may be violating minimum alignment requirements.");
+        static_assert(static_cast<std::size_t>(ALIGNMENT_TYPE) >= alignof(T), "You may be violating minimum alignment requirements.");
         using value_type = T;
-        static std::align_val_t constexpr ALIGNMENT{(std::align_val_t)ALIGNMENT_TYPE};
+        static constexpr std::align_val_t ALIGNMENT{static_cast<std::align_val_t>(ALIGNMENT_TYPE)};
 
         /**
          * @see https://stackoverflow.com/a/48062758/2191065
@@ -63,14 +67,15 @@ namespace aligned{
         template<typename U>
         constexpr explicit AlignedAllocator( AlignedAllocator<U, ALIGNMENT_TYPE> const& ) noexcept{}
 
-        [[nodiscard]] constexpr T* allocate(std::size_t n){
+        [[nodiscard]] static constexpr T* allocate(std::size_t n){
             if ( n > (std::numeric_limits<std::size_t>::max() / sizeof(T))){
                 throw std::bad_array_new_length();
             }
-            return static_cast<T*>(::operator new[](n * sizeof(T), ALIGNMENT));
+            T* ret = static_cast<T*>(::operator new[](n * sizeof(T), ALIGNMENT));
+            return ret;
         }
 
-        void deallocate(T* allocatedPointer, [[maybe_unused]] std::size_t n)
+        static void deallocate(T* allocatedPointer, [[maybe_unused]] std::size_t n)
         {
             ::operator delete[]( allocatedPointer, ALIGNMENT );
         }

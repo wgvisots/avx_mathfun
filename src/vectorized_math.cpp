@@ -24,6 +24,8 @@
 
 #include <immintrin.h>
 
+#include "avx_mathfun.h"
+
 #include "Aligned.h"
 #include "vectorized_math.h"
 
@@ -84,13 +86,13 @@ void vectorized::shortToFloat(const std::int16_t * RESTRICT in, float * RESTRICT
             //done like this so the compiler will unroll the inner loop for us
             for(int j = 0; j < 64; j += 16)
             {
-                __m256i in0 = _mm256_load_si256((const __m256i *)(in + i + j));
-                __m128i in1 = _mm256_extracti128_si256(in0, 0);
-                __m128i in2 = _mm256_extracti128_si256(in0, 1);
-                __m256i tmp1 = _mm256_cvtepi16_epi32(in1);
-                __m256i tmp2 = _mm256_cvtepi16_epi32(in2);
-                __m256  out1 = _mm256_cvtepi32_ps(tmp1);
-                __m256  out2 = _mm256_cvtepi32_ps(tmp2);
+                const __m256i in0 = _mm256_load_si256((const __m256i *)(in + i + j));
+                const __m128i in1 = _mm256_extracti128_si256(in0, 0);
+                const __m128i in2 = _mm256_extracti128_si256(in0, 1);
+                const __m256i tmp1 = _mm256_cvtepi16_epi32(in1);
+                const __m256i tmp2 = _mm256_cvtepi16_epi32(in2);
+                const __m256  out1 = _mm256_cvtepi32_ps(tmp1);
+                const __m256  out2 = _mm256_cvtepi32_ps(tmp2);
                 _mm256_store_ps(out + i + j + 0, out1);
                 _mm256_store_ps(out + i + j + 8, out2);
             }
@@ -132,6 +134,37 @@ void vectorized::floatToShort(const float * RESTRICT in, std::int16_t * RESTRICT
         out[i] = (short)in[i];
     }
 
+}
+
+void vectorized::reverse(const float * RESTRICT in, float * RESTRICT out,  std::size_t length) {
+    std::size_t i;
+    const std::size_t s2 = length - 32;
+    for(i = 0; i < s2; i += 32)
+    {
+        __m256 v0 = _mm256_load_ps(in + i +   0);
+        __m256 v1 = _mm256_load_ps(in + i +   8);
+        __m256 v2 = _mm256_load_ps(in + i +  16);
+        __m256 v3 = _mm256_load_ps(in + i +  24);
+
+        v0 = _mm256_permute2f128_ps(v0, v0, 1);
+        v1 = _mm256_permute2f128_ps(v1, v1, 1);
+        v2 = _mm256_permute2f128_ps(v2, v2, 1);
+        v3 = _mm256_permute2f128_ps(v3, v3, 1);
+        v0 = _mm256_permute_ps(v0, 0x1B);
+        v1 = _mm256_permute_ps(v1, 0x1B);
+        v2 = _mm256_permute_ps(v2, 0x1B);
+        v3 = _mm256_permute_ps(v3, 0x1B);
+
+        _mm256_storeu_ps((out + length) - (i +  8), v0);
+        _mm256_storeu_ps((out + length) - (i + 16), v1);
+        _mm256_storeu_ps((out + length) - (i + 24), v2);
+        _mm256_storeu_ps((out + length) - (i + 32), v3);
+    }
+    _mm256_zeroupper();
+    for(; i < length; i++)
+    {
+        out[(length - i) - 1] = in[i];
+    }
 }
 
 void vectorized::multiply(  float* RESTRICT io, const float num,  const std::size_t size){
@@ -274,4 +307,62 @@ void vectorized::addUNA(float* RESTRICT io, const float* RESTRICT second, std::s
     {
         io[i] = io[i] + second[i];
     }
+}
+
+void vectorized::iqToAmpAndPhase(const float * RESTRICT in, float * RESTRICT out, std::size_t size) {
+    static constexpr float piFloat{static_cast<float>(M_PI)};
+    ALIGN32_BEG __m256 val0 ALIGN32_END;
+    ALIGN32_BEG __m256 val1 ALIGN32_END;
+    ALIGN32_BEG __m256 tmp0 ALIGN32_END;
+    ALIGN32_BEG __m256 tmp1 ALIGN32_END;
+    ALIGN32_BEG __m256 tmp2 ALIGN32_END;
+    ALIGN32_BEG __m256 tmp3 ALIGN32_END;
+
+    ALIGN32_BEG __m256 tp ALIGN32_END;
+    tp = _mm256_broadcast_ss(&piFloat);
+
+    const std::size_t stop = size - 16;
+    std::size_t i = 0;
+    for(; i < stop; i+=16){
+        val0 = _mm256_load_ps(in + i);
+        val1 = _mm256_load_ps(in + i + 8);
+
+        tmp0 = _mm256_mul_ps(val0, val0);
+        tmp1 = _mm256_mul_ps(val1, val1);
+
+        tmp2 = _mm256_hadd_ps(tmp0, tmp1);
+        //TODO -> find a way to make rsqrt work!!!
+        tmp2 = _mm256_sqrt_ps(tmp2);          // 0,1,4,5,2,3,6,7
+
+        avx_mathfun::atan2(val0, val1, tmp3); // 0,1,4,5,2,3,6,7
+
+        // convert from -pi,+pi to 0,2pi
+        tmp3 = _mm256_add_ps(tmp3, tp);
+
+        tmp0 = _mm256_unpackhi_ps(tmp2, tmp3);
+        tmp1 = _mm256_unpacklo_ps(tmp2, tmp3);
+
+        _mm256_store_ps(out + i + 0, tmp1);
+        _mm256_store_ps(out + i + 8, tmp0);
+    }
+    _mm256_zeroupper();
+    for(; i < size; i+=2){
+        out[i+0] = std::hypot(in[i], in[i+1]);
+        out[i+1] = std::atan2(in[i], in[i+1]) + piFloat;
+    }
+}
+
+const __m256& vectorized::zeroVec() {
+    static ALIGN32_BEG __m256 ret ALIGN32_END;
+    static bool set{false};
+    if (!set) {
+        std::mutex lock;
+        std::lock_guard<std::mutex> lk(lock);
+        if (!set) {
+            constexpr float zero{0.0F};
+            set = true;
+            ret = _mm256_broadcast_ss(&zero);
+        }
+    }
+    return ret;
 }

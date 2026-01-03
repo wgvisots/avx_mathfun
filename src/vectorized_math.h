@@ -115,4 +115,20 @@ namespace vectorized{
      * @param size
      */
     void addUNA(float*        RESTRICT io, const float*        RESTRICT second,  std::size_t size); /*32 byte un-aligned*/
+
+    /**
+     * Take in an array of std::complex<float> (as a float*), and output an array of amplitude/phase.
+     *
+     * @param in I,Q,I,Q...
+     * @param out Amp,Phase,Amp,Phase...
+     * @param size the number of floats in 'in' (2X number of samples)
+     */
+    void iqToAmpAndPhase(const float * RESTRICT in, float * RESTRICT out, std::size_t size);
+
+    /**
+     * Simple helper to give you a constant __m256 (array of 8 floats) that are all set to 0.0F.
+     * @return
+     */
+    const __m256& zeroVec();
+
 }

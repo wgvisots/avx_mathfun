@@ -23,17 +23,33 @@
 #include <cstdint>
 #include <iostream>
 
+#include "gtest/gtest.h"
+
 #include "Aligned.h"
 
-int main(){
+TEST(AlignedAllocator, TestAligned){
     std::size_t* thing = aligned::allocateAligned<std::size_t>(aligned::Alignment::AVX, 10);
-    std::cout << (0 == ((std::uint64_t)thing % 32)) << std::endl;
+    EXPECT_TRUE(0 == ((std::uint64_t)thing % 32));
 
     using allocator = aligned::AlignedAllocator<std::size_t, aligned::Alignment::AVX>;
     std::vector<std::size_t, allocator> vec;
     vec.resize(1);
 
     std::size_t* vptr = vec.data();
-    std::cout << (0 == ((std::uint64_t)vptr % 32)) << std::endl;
-    return 0;
+    EXPECT_TRUE(0 == ((std::uint64_t)vptr % 32)) << std::endl;
+}
+
+TEST(AlignedAllocator, TestVec1) {
+    aligned::alignedVector<__m256> v0;
+    EXPECT_TRUE(v0.empty());
+}
+
+TEST(AlignedAllocator, TestVec2) {
+    aligned::alignedVector<__m256> v1(16);
+    EXPECT_EQ(16, v1.size());
+}
+
+TEST(AlignedAllocator, TestVec3) {
+    aligned::alignedVector<__m256> v1(32);
+    EXPECT_EQ(32, v1.size());
 }

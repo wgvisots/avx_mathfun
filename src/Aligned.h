@@ -25,6 +25,7 @@
 #include <cstdlib>
 #include <complex>
 #include <vector>
+#include <immintrin.h>
 
 #include "AlignedAllocator.h"
 
@@ -36,7 +37,7 @@ namespace aligned
  * All __m256 variables need to be aligned on 32 byte boundaries.  This
  * *should* be done with 'alignof(__m256) varName;', but if
  * 'alignof(std::max_align_t) < alignof(__m256)', then the behavior
- * of the alignof is undefined and it might not throw a warning.
+ * of the alignof is undefined, and it might not throw a warning.
  *
  * On GCC 4.9 and VC, max_align_t gives you 16 and not 32, so you need to
  * use the compiler specific '__attribute__ ((aligned (32)))' (trailing).
@@ -86,6 +87,13 @@ namespace aligned
     //provided mostly as examples:
     template< class T > using alignedVector = std::vector< T, aligned::AlignedAllocator<T, Alignment::AVX> >;
     using alignedComplexVector = alignedVector<std::complex<float> >;
+    using alignedFloatVector   = alignedVector<float>;
+
+    //NOTE: If you are getting warning: ignoring attributes on template argument ‘__m256’, then you have to carefully handle
+    //      going between __m256 and float[8] using this structure.  Intel tried to help us with this by using the
+    //      __may_alias__ attribute, but your compiler can't handle that as a template argument.  Therefore, strict
+    //      aliasing rules apply to __m256s that are in this container.
+    using alignedVecVector     = alignedVector<__m256>;
 };
 
 
