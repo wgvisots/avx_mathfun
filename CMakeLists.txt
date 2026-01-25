@@ -25,25 +25,36 @@ cmake_minimum_required(VERSION 3.20)
 set(PROJ mathfun)
 project(${PROJ})
 
-set(INC_DIRS "./src" )
+set(INC_DIRS "${CMAKE_SOURCE_DIR}/src" )
 file(GLOB LIB_SRCS "./src/*.cpp")
 file(GLOB LIB_HDRS "./src/*.h")
 
 set(LIBS "pthread" )
 
 add_library(${PROJ} SHARED ${LIB_SRCS})
-target_include_directories(${PROJ} PUBLIC ${INC_DIRS})
+#target_include_directories(${PROJ} PUBLIC ${INC_DIRS})
 target_link_libraries(${PROJ} ${LIBS})
 
 enable_testing()
 add_subdirectory(test)
 
+set_property(TARGET ${PROJ}
+             PROPERTY PUBLIC_HEADER "${LIB_HDRS}")
+
 install(TARGETS ${PROJ}
+        EXPORT "${PROJ}Config"
         ARCHIVE DESTINATION lib/${PROJ}
         LIBRARY DESTINATION lib/${PROJ}
-        PUBLIC_HEADER DESTINATION ${PROJ}/include)
+        PUBLIC_HEADER DESTINATION include/${PROJ})
 
-install(FILES ${LIB_HDRS} DESTINATION include/${PROJ})
+export(TARGETS ${PROJ}
+       NAMESPACE ${PROJ}::
+       FILE "${CMAKE_CURRENT_BINARY_DIR}/${PROJ}Config.cmake"
+)
+install(EXPORT "${PROJ}Config"
+        DESTINATION lib/${PROJ}/cmake
+        NAMESPACE ${PROJ}::
+)
 
 set(CPACK_PACKAGE_VERSION ${VERSION})
 set(CPACK_PACKAGE_NAME ${PROJ})

@@ -21,8 +21,8 @@
 
 #include "gtest/gtest.h"
 
-#include "Aligned.h"
-#include "Convolution.h"
+#include "../src/Aligned.h"
+#include "../src/Convolution.h"
 
 TEST(ConvolutionTest, TestCreate) {
     //16 samples

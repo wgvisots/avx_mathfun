@@ -25,7 +25,7 @@
 
 #include "gtest/gtest.h"
 
-#include "Aligned.h"
+#include "../src/Aligned.h"
 
 TEST(AlignedAllocator, TestAligned){
     std::size_t* thing = aligned::allocateAligned<std::size_t>(aligned::Alignment::AVX, 10);
