@@ -180,8 +180,7 @@ void vectorized::multiply(  float* RESTRICT io, const float num,  const std::siz
 }
 
 void vectorized::multiplyIQ(float* RESTRICT io,  float ival,  float qval,  std::size_t size){
-    std::unique_ptr<float> mulArrayPtr{aligned::allocateAligned<float>(aligned::Alignment::AVX, 8)};
-    float* mulArray = mulArrayPtr.get();
+    ALIGN32_BEG float mulArray[8] ALIGN32_END;
     mulArray[0] = ival;
     mulArray[1] = qval;
     mulArray[2] = ival;

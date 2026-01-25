@@ -31,6 +31,7 @@
 
 #pragma once /*wgvisots*/
 
+#include <cstring>
 #include <immintrin.h>
 
 #include "Aligned.h" //wgvisots - this is to provide ALIGN32_BEG/ALIGN32_end
@@ -734,7 +735,7 @@ inline void sincos256_ps(v8sf x, v8sf *s, v8sf *c) {
 inline void atan2(const __m256 &a, const __m256 &b, __m256 &c){
     float *aArray = (float*)&a;
     float *bArray = (float*)&b;
-    float *cArray = (float*)&c;
+    ALIGN32_BEG float cArray[8] ALIGN32_END;
 
     cArray[0] = std::atan2(aArray[0], aArray[1]);
     cArray[1] = std::atan2(aArray[2], aArray[3]);
@@ -744,5 +745,7 @@ inline void atan2(const __m256 &a, const __m256 &b, __m256 &c){
     cArray[5] = std::atan2(aArray[6], aArray[7]);
     cArray[6] = std::atan2(bArray[4], bArray[5]);
     cArray[7] = std::atan2(bArray[6], bArray[7]);
+
+    memcpy(&c, cArray, sizeof(cArray));
 }
 }

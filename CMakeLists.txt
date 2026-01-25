@@ -25,29 +25,30 @@ cmake_minimum_required(VERSION 3.20)
 set(PROJ mathfun)
 project(${PROJ})
 
-set(CMAKE_CXX_STANDARD 20)
-
-set(O_FLAG "-O0")
-set(MATH_FLAG "-mavx2")
-
-set(CMAKE_CXX_FLAGS "-FPIC -fopenmp ${MATH_FLAG} -Wall -Wextra -Wpedantic -g -pg ${O_FLAG}")
-
 set(INC_DIRS "./src" )
 file(GLOB LIB_SRCS "./src/*.cpp")
+file(GLOB LIB_HDRS "./src/*.h")
 
 set(LIBS "pthread" )
 
-add_library(${PROJ} ${LIB_SRCS})
+add_library(${PROJ} SHARED ${LIB_SRCS})
 target_include_directories(${PROJ} PUBLIC ${INC_DIRS})
 target_link_libraries(${PROJ} ${LIBS})
 
 enable_testing()
 add_subdirectory(test)
-#
-#set(APPS "test_main")
-#
-#foreach (APP ${APPS})
-#    add_executable(${APP} "test/${APP}.cpp")
-#    target_include_directories(${APP} PUBLIC ${INC_DIRS})
-#    target_link_libraries(${APP} ${LIBS} ${PROJ})
-#endforeach ()
+
+install(TARGETS ${PROJ}
+        ARCHIVE DESTINATION lib/${PROJ}
+        LIBRARY DESTINATION lib/${PROJ}
+        PUBLIC_HEADER DESTINATION ${PROJ}/include)
+
+install(FILES ${LIB_HDRS} DESTINATION include/${PROJ})
+
+set(CPACK_PACKAGE_VERSION ${VERSION})
+set(CPACK_PACKAGE_NAME ${PROJ})
+set(CPACK_PACKAGE_CONTACT "W. Greg Visotski")
+set(CPACK_PACKAGE_VENDOR "NMERC")
+set(CPACK_PACKAGING_INSTALL_PREFIX "/usr/")
+set(CPACK_PACKAGE_FILE_NAME "${CPACK_PACKAGE_NAME}-${VERSION}-${CPACK_PACKAGE_RELEASE}.${CMAKE_SYSTEM_PROCESSOR}")
+include(CPack)
