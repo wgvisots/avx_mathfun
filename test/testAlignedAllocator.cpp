@@ -40,16 +40,16 @@ TEST(AlignedAllocator, TestAligned){
 }
 
 TEST(AlignedAllocator, TestVec1) {
-    aligned::alignedVector<__m256> v0;
+    aligned::alignedVector<float> v0;
     EXPECT_TRUE(v0.empty());
 }
 
 TEST(AlignedAllocator, TestVec2) {
-    aligned::alignedVector<__m256> v1(16);
+    aligned::alignedVector<float> v1(16);
     EXPECT_EQ(16, v1.size());
 }
 
 TEST(AlignedAllocator, TestVec3) {
-    aligned::alignedVector<__m256> v1(32);
+    aligned::alignedVector<float> v1(32);
     EXPECT_EQ(32, v1.size());
 }

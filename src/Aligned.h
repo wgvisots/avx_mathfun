@@ -93,6 +93,8 @@ namespace aligned
     //      going between __m256 and float[8] using this structure.  Intel tried to help us with this by using the
     //      __may_alias__ attribute, but your compiler can't handle that as a template argument.  Therefore, strict
     //      aliasing rules apply to __m256s that are in this container.
+    //
+    //      More to the point: the attribute that is getting ignored is __may_alias__.  
     using alignedVecVector     = alignedVector<__m256>;
 };
 

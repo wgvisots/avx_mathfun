@@ -27,12 +27,30 @@ Copyright (C) 2025 W. Greg Visotski
 
 #include "Aligned.h"
 
+/**
+ * This is a tool for performing complex convolution.  The intent is for this to be used on digital RF data (AKA: IQ data).
+ * Each "sample" consists of two floats: an in-phase and quadrature (IQ).  They can be considered a std::complex<float>,
+ * but I use a flat array of floats for performance reasons.
+ *
+ * This class SIMD vectorizes the convolution, which gives some pretty big performance gains, but comes with some
+ * caveats:
+ * 1) All your inputs/outputs shall be 32-byte aligned.  ('kernel', 'in', and 'out')
+ * 2) Short kernels get less performance boosts.
+ * 3) Kernels should, but don't need to be, a multiple of 4 samples long.
+ * 4) Kernels less than 4 samples shall not be used.
+ * 4) Data ('in'/'out') should be much longer than the kernel.
+ * 5) Note the use of RESTRICT keyword below - it is your responsibility to obey it.
+ *
+ * Sizes are given in the number of numbers in each array, not the number samples.  Sizes must, therefore, be an even
+ * number.
+ */
 class Convolution {
 public:
     /**
+     * Create a convolution object with a given kernel.
      *
      * @param kernel Your kernel, composed of std::complex<float>, but provided as a vector of floats (I,Q,I,Q...)
-     * @param kernelSize Number of floats in the kernel
+     * @param kernelSize Number of floats in the kernel (2X number of samples)
      */
     Convolution (const float* kernel, std::size_t kernelSize);
     ~Convolution() = default;
@@ -41,7 +59,7 @@ public:
      *
      * @param in array of std::complex<float> (I,Q,I,Q...), as an array of 'size' floats
      * @param out the complex convolution result, as an array of floats - truncated to the same length as the input
-     * @param size number of floats (not complexes) in 'in'
+     * @param size number of floats (not complexes) in 'in' (2X number of samples)
      */
     void convolve(const float* RESTRICT in, float* RESTRICT out, std::size_t size);
 

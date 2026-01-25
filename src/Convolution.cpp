@@ -122,7 +122,7 @@ void Convolution::convolve(const float* RESTRICT in, float* RESTRICT out, std::s
         _mm256_storeu_ps(out + i, acc);
     }
 
-    //and the last
+    //and the remainder
     out[end] = 0.0;
     out[end-1] = 0.0;
     for(unsigned int k = 0; k < this->kernelLength; k+=2)

@@ -33,6 +33,14 @@ TEST(ConvolutionTest, TestCreate) {
     Convolution con(kernel.data(), kernel.size());
 }
 
+/**
+ * What we're going to do here is make a kernel where all values are equal.  The Convolution will normalize this to
+ * a total of 1.  This'll have the effect of outputting, for each sample under the kernel, the average of all samples
+ * under the filter.
+ *
+ * We are then going to make our data all zeros, with a single 1 value.  This means that after we filter, we can sum
+ * the result and get a value of 1 (with floating point rounding error).
+ */
 TEST(ConvolutionTest, TestConvolve) {
     //16 samples
     aligned::alignedFloatVector kernel(32, 1.0F);
@@ -47,7 +55,7 @@ TEST(ConvolutionTest, TestConvolve) {
 
     float v = std::accumulate(result.begin(), result.end(), 0.0F);
 
-    std::for_each(result.begin(), result.end(), [](const float& f){std::cout << f << ", ";});
-    std::cout << std::endl;
+    // std::for_each(result.begin(), result.end(), [](const float& f){std::cout << f << ", ";});
+    // std::cout << std::endl;
     EXPECT_NEAR(v, 1.0F, 0.1F);
 }
