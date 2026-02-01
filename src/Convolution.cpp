@@ -83,7 +83,7 @@ Convolution::Convolution (const float* kernel, const std::size_t kernelSize) : k
     this->leftover.resize(kernelSize, 0.0F);
 }
 
-void Convolution::convolve(const float* RESTRICT in, float* RESTRICT out, const std::size_t size) {
+void Convolution::convolve(const float* __restrict__ in, float* __restrict__ out, const std::size_t size) {
     const std::size_t longerLength = size + this->kernelLength;
     const std::size_t inAlignedSize = longerLength + (8 - (longerLength % 8)); //this is to make sure that we end on a full __m256
     if(inAlignedSize > this->dataAligned[0].size()){

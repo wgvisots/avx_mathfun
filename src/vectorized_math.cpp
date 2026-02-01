@@ -31,7 +31,7 @@
 #include "vectorized_math.h"
 
 namespace{
-    inline std::size_t doVectorizedMultiply(float* RESTRICT io, const __m256& mul , const std::size_t size){
+    inline std::size_t doVectorizedMultiply(float* __restrict__ io, const __m256& mul , const std::size_t size){
         assert(size >= 64);
         //    __m256 mul ALIGN32_END;
         __m256 f0  ALIGN32_END;
@@ -78,7 +78,7 @@ namespace{
     }
 
 }
-void vectorized::shortToFloat(const std::int16_t * RESTRICT in, float * RESTRICT out, const std::size_t length){
+void vectorized::shortToFloat(const std::int16_t * __restrict__ in, float * __restrict__ out, const std::size_t length){
     std::size_t i{0};
     if(length > 64){
         const std::size_t stop{length - 64};
@@ -107,7 +107,7 @@ void vectorized::shortToFloat(const std::int16_t * RESTRICT in, float * RESTRICT
 
 }
 
-void vectorized::floatToShort(const float * RESTRICT in, std::int16_t * RESTRICT out, const std::size_t length){
+void vectorized::floatToShort(const float * __restrict__ in, std::int16_t * __restrict__ out, const std::size_t length){
     std::size_t i{0};
     if(length > 16){
         __m256  in0  ALIGN32_END;
@@ -137,7 +137,7 @@ void vectorized::floatToShort(const float * RESTRICT in, std::int16_t * RESTRICT
 
 }
 
-void vectorized::reverse(const float * RESTRICT in, float * RESTRICT out,  std::size_t length) {
+void vectorized::reverse(const float * __restrict__ in, float * __restrict__ out,  std::size_t length) {
     std::size_t i;
     const std::size_t s2 = length - 32;
     for(i = 0; i < s2; i += 32)
@@ -168,7 +168,7 @@ void vectorized::reverse(const float * RESTRICT in, float * RESTRICT out,  std::
     }
 }
 
-void vectorized::multiply(  float* RESTRICT io, const float num,  const std::size_t size){
+void vectorized::multiply(  float* __restrict__ io, const float num,  const std::size_t size){
     __m256 mul ALIGN32_END;
 
     mul = _mm256_broadcast_ss(&num);
@@ -180,7 +180,7 @@ void vectorized::multiply(  float* RESTRICT io, const float num,  const std::siz
     }
 }
 
-void vectorized::multiplyIQ(float* RESTRICT io,  float ival,  float qval,  std::size_t size){
+void vectorized::multiplyIQ(float* __restrict__ io,  float ival,  float qval,  std::size_t size){
     float mulArray[8] ALIGN32_END;
     mulArray[0] = ival;
     mulArray[1] = qval;
@@ -200,7 +200,7 @@ void vectorized::multiplyIQ(float* RESTRICT io,  float ival,  float qval,  std::
 
 }
 
-void vectorized::add(std::int16_t* RESTRICT io, const std::int16_t* RESTRICT second,  std::size_t size){
+void vectorized::add(std::int16_t* __restrict__ io, const std::int16_t* __restrict__ second,  std::size_t size){
     std::size_t i = 0;
     const std::size_t stop = size - 32;
     for (; i <= stop; i += 32)
@@ -224,7 +224,7 @@ void vectorized::add(std::int16_t* RESTRICT io, const std::int16_t* RESTRICT sec
 
 }
 
-void vectorized::addUNA(std::int16_t* RESTRICT io, const std::int16_t* RESTRICT second,  std::size_t size){
+void vectorized::addUNA(std::int16_t* __restrict__ io, const std::int16_t* __restrict__ second,  std::size_t size){
     std::size_t i = 0;
     const std::size_t stop = size - 32;
     for (; i <= stop; i += 32)
@@ -247,7 +247,7 @@ void vectorized::addUNA(std::int16_t* RESTRICT io, const std::int16_t* RESTRICT 
     }
 }
 
-void vectorized::add(float* RESTRICT io, const float* RESTRICT second,  std::size_t size){
+void vectorized::add(float* __restrict__ io, const float* __restrict__ second,  std::size_t size){
     std::size_t i = 0;
     const std::size_t stop = size - 32;
     for(; i <= stop; i += 32)
@@ -278,7 +278,7 @@ void vectorized::add(float* RESTRICT io, const float* RESTRICT second,  std::siz
     }
 }
 
-void vectorized::addUNA(float* RESTRICT io, const float* RESTRICT second, std::size_t size){
+void vectorized::addUNA(float* __restrict__ io, const float* __restrict__ second, std::size_t size){
     std::size_t i = 0;
     const std::size_t stop = size - 32;
     for(; i <= stop; i += 32)
@@ -309,7 +309,7 @@ void vectorized::addUNA(float* RESTRICT io, const float* RESTRICT second, std::s
     }
 }
 
-void vectorized::iqToAmpAndPhase(const float * RESTRICT in, float * RESTRICT out, std::size_t size) {
+void vectorized::iqToAmpAndPhase(const float * __restrict__ in, float * __restrict__ out, std::size_t size) {
     static constexpr float piFloat{static_cast<float>(M_PI)};
     __m256 val0 ALIGN32_END;
     __m256 val1 ALIGN32_END;

@@ -52,8 +52,6 @@ namespace aligned
     #define ALIGN64_END   __attribute__ ((aligned (64)))
     #define ALIGN32_END   __attribute__ ((aligned (32)))
     #define ALIGN16_END   __attribute__ ((aligned (16)))
-    #define ALWAYS_INLINE __attribute__ ((always_inline))
-    #define RESTRICT      __restrict__
 
     template<typename T>
     T *allocateAligned(const aligned::Alignment align, const std::size_t numElements){

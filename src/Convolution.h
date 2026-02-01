@@ -60,7 +60,7 @@ public:
      * @param out the complex convolution result, as an array of floats - truncated to the same length as the input
      * @param size number of floats (not complexes) in 'in' (2X number of samples)
      */
-    void convolve(const float* RESTRICT in, float* RESTRICT out, std::size_t size);
+    void convolve(const float* __restrict__ in, float* __restrict__ out, std::size_t size);
 
 private:
     const std::size_t kernelLength; // in floats, not complexes
