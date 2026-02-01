@@ -23,7 +23,6 @@ Copyright (C) 2025 W. Greg Visotski
 #pragma once
 
 #include <memory>
-#include <immintrin.h>
 
 #include "Aligned.h"
 

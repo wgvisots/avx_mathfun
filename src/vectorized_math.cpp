@@ -21,6 +21,7 @@
 */
 
 #include <cassert>
+#include <mutex>
 
 #include <immintrin.h>
 
@@ -32,15 +33,15 @@
 namespace{
     inline std::size_t doVectorizedMultiply(float* RESTRICT io, const __m256& mul , const std::size_t size){
         assert(size >= 64);
-        //    ALIGN32_BEG __m256 mul ALIGN32_END;
-        ALIGN32_BEG __m256 f0  ALIGN32_END;
-        ALIGN32_BEG __m256 f1  ALIGN32_END;
-        ALIGN32_BEG __m256 f2  ALIGN32_END;
-        ALIGN32_BEG __m256 f3  ALIGN32_END;
-        ALIGN32_BEG __m256 f4  ALIGN32_END;
-        ALIGN32_BEG __m256 f5  ALIGN32_END;
-        ALIGN32_BEG __m256 f6  ALIGN32_END;
-        ALIGN32_BEG __m256 f7  ALIGN32_END;
+        //    __m256 mul ALIGN32_END;
+        __m256 f0  ALIGN32_END;
+        __m256 f1  ALIGN32_END;
+        __m256 f2  ALIGN32_END;
+        __m256 f3  ALIGN32_END;
+        __m256 f4  ALIGN32_END;
+        __m256 f5  ALIGN32_END;
+        __m256 f6  ALIGN32_END;
+        __m256 f7  ALIGN32_END;
 
         const std::size_t stop = size - 64;
         std::size_t i = 0;
@@ -109,10 +110,10 @@ void vectorized::shortToFloat(const std::int16_t * RESTRICT in, float * RESTRICT
 void vectorized::floatToShort(const float * RESTRICT in, std::int16_t * RESTRICT out, const std::size_t length){
     std::size_t i{0};
     if(length > 16){
-        ALIGN32_BEG __m256  in0  ALIGN32_END;
-        ALIGN32_BEG __m256  in1  ALIGN32_END;
-        ALIGN32_BEG __m256i out0 ALIGN32_END;
-        ALIGN32_BEG __m256i out1 ALIGN32_END;
+        __m256  in0  ALIGN32_END;
+        __m256  in1  ALIGN32_END;
+        __m256i out0 ALIGN32_END;
+        __m256i out1 ALIGN32_END;
 
         const std::size_t stop{length - 16};
 
@@ -168,7 +169,7 @@ void vectorized::reverse(const float * RESTRICT in, float * RESTRICT out,  std::
 }
 
 void vectorized::multiply(  float* RESTRICT io, const float num,  const std::size_t size){
-    ALIGN32_BEG __m256 mul ALIGN32_END;
+    __m256 mul ALIGN32_END;
 
     mul = _mm256_broadcast_ss(&num);
     std::size_t i = doVectorizedMultiply(io, mul, size);
@@ -180,7 +181,7 @@ void vectorized::multiply(  float* RESTRICT io, const float num,  const std::siz
 }
 
 void vectorized::multiplyIQ(float* RESTRICT io,  float ival,  float qval,  std::size_t size){
-    ALIGN32_BEG float mulArray[8] ALIGN32_END;
+    float mulArray[8] ALIGN32_END;
     mulArray[0] = ival;
     mulArray[1] = qval;
     mulArray[2] = ival;
@@ -310,14 +311,14 @@ void vectorized::addUNA(float* RESTRICT io, const float* RESTRICT second, std::s
 
 void vectorized::iqToAmpAndPhase(const float * RESTRICT in, float * RESTRICT out, std::size_t size) {
     static constexpr float piFloat{static_cast<float>(M_PI)};
-    ALIGN32_BEG __m256 val0 ALIGN32_END;
-    ALIGN32_BEG __m256 val1 ALIGN32_END;
-    ALIGN32_BEG __m256 tmp0 ALIGN32_END;
-    ALIGN32_BEG __m256 tmp1 ALIGN32_END;
-    ALIGN32_BEG __m256 tmp2 ALIGN32_END;
-    ALIGN32_BEG __m256 tmp3 ALIGN32_END;
+    __m256 val0 ALIGN32_END;
+    __m256 val1 ALIGN32_END;
+    __m256 tmp0 ALIGN32_END;
+    __m256 tmp1 ALIGN32_END;
+    __m256 tmp2 ALIGN32_END;
+    __m256 tmp3 ALIGN32_END;
 
-    ALIGN32_BEG __m256 tp ALIGN32_END;
+    __m256 tp ALIGN32_END;
     tp = _mm256_broadcast_ss(&piFloat);
 
     const std::size_t stop = size - 16;
@@ -352,7 +353,7 @@ void vectorized::iqToAmpAndPhase(const float * RESTRICT in, float * RESTRICT out
 }
 
 const __m256& vectorized::zeroVec() {
-    static ALIGN32_BEG __m256 ret ALIGN32_END;
+    static __m256 ret ALIGN32_END;
     static bool set{false};
     if (!set) {
         std::mutex lock;

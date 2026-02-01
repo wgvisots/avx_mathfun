@@ -23,7 +23,6 @@
 #pragma once
 
 #include <cstdlib>
-#include <iostream>
 #include <memory>
 #include <limits>
 
@@ -54,6 +53,7 @@ namespace aligned{
         static constexpr std::align_val_t ALIGNMENT{static_cast<std::align_val_t>(ALIGNMENT_TYPE)};
 
         /**
+         * Thanks to Bo Persson
          * @see https://stackoverflow.com/a/48062758/2191065
          */
         template<class OTHER>

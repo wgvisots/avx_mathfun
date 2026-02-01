@@ -47,7 +47,7 @@ typedef __m256i v8si; // vector of 8 int   (avx)
 typedef __m128i v4si; // vector of 8 int   (avx)
 
 #define _PI32AVX_CONST(Name, Val)                                            \
-  static const ALIGN32_BEG int _pi32avx_##Name[4] ALIGN32_END = { Val, Val, Val, Val }
+  static const int _pi32avx_##Name[4] ALIGN32_END = { Val, Val, Val, Val }
 
 _PI32AVX_CONST(1, 1);
 _PI32AVX_CONST(inv1, ~1);
@@ -57,11 +57,11 @@ _PI32AVX_CONST(4, 4);
 
 /* declare some AVX constants -- why can't I figure a better way to do that? */
 #define _PS256_CONST(Name, Val)                                            \
-  static const ALIGN32_BEG float _ps256_##Name[8] ALIGN32_END = { Val, Val, Val, Val, Val, Val, Val, Val }
+  static const float _ps256_##Name[8] ALIGN32_END = { Val, Val, Val, Val, Val, Val, Val, Val }
 #define _PI32_CONST256(Name, Val)                                            \
-  static const ALIGN32_BEG int _pi32_256_##Name[8] ALIGN32_END = { Val, Val, Val, Val, Val, Val, Val, Val }
+  static const int _pi32_256_##Name[8] ALIGN32_END = { Val, Val, Val, Val, Val, Val, Val, Val }
 #define _PS256_CONST_TYPE(Name, Type, Val)                                 \
-  static const ALIGN32_BEG Type _ps256_##Name[8] ALIGN32_END = { Val, Val, Val, Val, Val, Val, Val, Val }
+  static const Type _ps256_##Name[8] ALIGN32_END = { Val, Val, Val, Val, Val, Val, Val, Val }
 
 _PS256_CONST(1  , 1.0f);
 _PS256_CONST(0p5, 0.5f);
@@ -101,14 +101,14 @@ typedef union imm_xmm_union {
 } imm_xmm_union;
 
 #define COPY_IMM_TO_XMM(imm_, xmm0_, xmm1_) {    \
-    ALIGN32_BEG imm_xmm_union u ALIGN32_END;  \
+    imm_xmm_union u ALIGN32_END;  \
     u.imm = imm_;                  \
     xmm0_ = u.xmm[0];                            \
     xmm1_ = u.xmm[1];                            \
 }
 
 #define COPY_XMM_TO_IMM(xmm0_, xmm1_, imm_) {                       \
-    ALIGN32_BEG imm_xmm_union u ALIGN32_END; \
+    imm_xmm_union u ALIGN32_END; \
     u.xmm[0]=xmm0_; u.xmm[1]=xmm1_; imm_ = u.imm; \
   }
 
@@ -735,7 +735,7 @@ inline void sincos256_ps(v8sf x, v8sf *s, v8sf *c) {
 inline void atan2(const __m256 &a, const __m256 &b, __m256 &c){
     float *aArray = (float*)&a;
     float *bArray = (float*)&b;
-    ALIGN32_BEG float cArray[8] ALIGN32_END;
+    float cArray[8] ALIGN32_END;
 
     cArray[0] = std::atan2(aArray[0], aArray[1]);
     cArray[1] = std::atan2(aArray[2], aArray[3]);

@@ -36,7 +36,7 @@ namespace vectorized{
      *
      * @param in - a pointer to an array of std::uint16_t of length 'length' to be read from
      * @param out - a pointer to an array of float of length 'length' to be written to
-     * @param length - the length of in and out
+     * @param length - the length of in and out (number of floats)
      */
     void shortToFloat(const std::int16_t * RESTRICT in, float * RESTRICT out,  std::size_t length);
 
@@ -47,7 +47,7 @@ namespace vectorized{
      *
      * @param in - a pointer to an array of float of length 'length' to be read from
      * @param out - a pointer to an array of std::uint16_t of length 'length' to be written to
-     * @param length - the length of in and out
+     * @param length - the length of in and out (number of floats)
      */
     void floatToShort(const float * RESTRICT in, std::int16_t * RESTRICT out,  std::size_t length);
 
@@ -56,16 +56,16 @@ namespace vectorized{
      * NOTE: Assumes aligned memory!
      * @param in - an array
      * @param out - will be filled with in, only backwards
-     * @param size
+     * @param size - the length of in and out
      */
-    void reverse(const float * RESTRICT in, float * RESTRICT out,  std::size_t length);
+    void reverse(const float * RESTRICT in, float * RESTRICT out,  std::size_t size);
 
     /**
      * Multiply every value in 'io' by 'num', and save back into 'io'
      * NOTE: Assumes aligned memory!
      * @param io
      * @param num
-     * @param size
+     * @param size - the length of in and out (number of floats)
      */
     void multiply(  float* RESTRICT io,  float num,   std::size_t size);
 
@@ -87,7 +87,7 @@ namespace vectorized{
      * @param second
      * @param size
      */
-    void add(   std::int16_t* RESTRICT io, const std::int16_t* RESTRICT second,  std::size_t size); /*32 byte aligned*/
+    void add(std::int16_t* RESTRICT io, const std::int16_t* RESTRICT second,  std::size_t size); /*32 byte aligned*/
 
     /**
      * Add the elements, element by element, of the two arrays ('io' and 'secon'), and write back to 'io'.

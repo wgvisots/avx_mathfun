@@ -23,6 +23,7 @@ Copyright (C) 2025 W. Greg Visotski
 #include <cassert>
 #include <cstring>
 #include <iostream>
+#include <mutex>
 
 #include "Convolution.h"
 
@@ -33,7 +34,7 @@ Copyright (C) 2025 W. Greg Visotski
 
 namespace {
 const __m256& negateEveryOther(){
-    static ALIGN32_BEG __m256 ret ALIGN32_END;
+    static __m256 ret ALIGN32_END;
     static bool set{false};
     if (!set) {
         std::mutex lock;
@@ -69,8 +70,8 @@ Convolution::Convolution (const float* kernel, const std::size_t kernelSize) : k
     const __m256& neg = negateEveryOther();
     for(unsigned int i = 0; i < kernelSize; i+=2)
     {
-        ALIGN32_BEG __m256 u ALIGN32_END;
-        ALIGN32_BEG __m256 v ALIGN32_END;
+        __m256 u ALIGN32_END;
+        __m256 v ALIGN32_END;
         v = _mm256_broadcast_ss(&(this->theKernel[(kernelSize-i) - 1]));
         u = _mm256_broadcast_ss(&(this->theKernel[(kernelSize-(i+1)) - 1]));
 
@@ -82,20 +83,20 @@ Convolution::Convolution (const float* kernel, const std::size_t kernelSize) : k
     this->leftover.resize(kernelSize, 0.0F);
 }
 
-void Convolution::convolve(const float* RESTRICT in, float* RESTRICT out, std::size_t size) {
-    std::size_t longerLength = size + this->kernelLength;
-    std::size_t inAlignedSize = longerLength + (8 - (longerLength % 8)); //this is to make sure that we end on a full __m256
+void Convolution::convolve(const float* RESTRICT in, float* RESTRICT out, const std::size_t size) {
+    const std::size_t longerLength = size + this->kernelLength;
+    const std::size_t inAlignedSize = longerLength + (8 - (longerLength % 8)); //this is to make sure that we end on a full __m256
     if(inAlignedSize > this->dataAligned[0].size()){
         for(aligned::alignedFloatVector & v : this->dataAligned){
             v.resize(inAlignedSize);
         }
     }
 
-    ALIGN32_BEG __m256 dataBlock ALIGN32_END;
-    ALIGN32_BEG __m256 prod      ALIGN32_END;
-    ALIGN32_BEG __m256 acc       ALIGN32_END;
-    ALIGN32_BEG __m256 ii        ALIGN32_END;
-    ALIGN32_BEG __m256 qq        ALIGN32_END;
+    __m256 dataBlock ALIGN32_END;
+    __m256 prod      ALIGN32_END;
+    __m256 acc       ALIGN32_END;
+    __m256 ii        ALIGN32_END;
+    __m256 qq        ALIGN32_END;
 
     /* We need a set of four copies of our input, each one offset by one whole sample (two floats) from its predecessor.
      */
@@ -107,7 +108,7 @@ void Convolution::convolve(const float* RESTRICT in, float* RESTRICT out, std::s
     for(std::size_t i = 0; i < end; i += 8){
         acc = _mm256_setzero_ps();
         for(unsigned int j = 0; j < this->kernelLength; j += 8){
-            std::size_t offset = i + j;
+            const std::size_t offset = i + j;
             int kk = 0;
             for (int k = 0; k < 4; k++, kk+=2){
                 assert((j+kk) < this->kernelLength);
