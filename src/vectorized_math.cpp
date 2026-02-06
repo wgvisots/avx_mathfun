@@ -104,7 +104,6 @@ void vectorized::shortToFloat(const std::int16_t * __restrict__ in, float * __re
     {
         out[i] = (float)in[i];
     }
-
 }
 
 void vectorized::floatToShort(const float * __restrict__ in, std::int16_t * __restrict__ out, const std::size_t length){
