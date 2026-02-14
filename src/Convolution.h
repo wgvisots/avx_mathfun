@@ -1,5 +1,5 @@
 /*
-Copyright (C) 2025 W. Greg Visotski
+Copyright (C) 2025 - 2026 W. Greg Visotski
 
   This software is provided 'as-is', without any express or implied
   warranty.  In no event will the authors be held liable for any damages
