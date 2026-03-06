@@ -31,6 +31,15 @@
 #include "vectorized_math.h"
 
 namespace{
+    constexpr std::uint16_t uFFFF{0xFFFF};
+    constexpr std::int16_t  iFFFF{static_cast<std::int16_t>(uFFFF)};
+    const __m256i magic1      ALIGN32_END = _mm256_setr_epi8 (2, 3, 0, 1, 6, 7, 4, 5, 10, 11, 8, 9, 14, 15, 12, 13, 18, 19, 16, 17, 22, 23, 20, 21, 26, 27, 24, 25, 30, 31, 28, 29);
+    const __m256i magic2      ALIGN32_END = _mm256_setr_epi8 (0, 1, 8, 9, 2, 3, 10, 11, 4, 5, 12, 13, 6, 7, 14, 15, 16, 17, 24, 25, 18, 19, 26, 27, 20, 21, 28, 29, 22, 23, 30, 31);
+    const __m256i magic3      ALIGN32_END = _mm256_setr_epi32(0, 4, 1, 5, 2, 6, 3, 7);
+    const __m256i negateAdd   ALIGN32_END = _mm256_setr_epi16(0x0, 0x0001, 0x0, 0x0001, 0x0, 0x0001, 0x0, 0x0001, 0x0, 0x0001, 0x0, 0x0001, 0x0, 0x0001, 0x0, 0x0001);
+    const __m256i negateMask  ALIGN32_END = _mm256_setr_epi16(0x0, iFFFF, 0x0, iFFFF, 0x0, iFFFF, 0x0, iFFFF, 0x0, iFFFF, 0x0, iFFFF, 0x0, iFFFF, 0x0, iFFFF);
+    const __m256  negateFloat ALIGN32_END = _mm256_setr_ps   (1, -1, 1, -1, 1, -1, 1, -1);
+
     inline std::size_t doVectorizedMultiply(float* __restrict__ io, const __m256& mul , const std::size_t size){
         assert(size >= 64);
         //    __m256 mul ALIGN32_END;
@@ -315,7 +324,7 @@ void vectorized::iqToAmpAndPhase(const float * __restrict__ in, float * __restri
     __m256 tmp0 ALIGN32_END;
     __m256 tmp1 ALIGN32_END;
     __m256 tmp2 ALIGN32_END;
-    __m256 tmp3 ALIGN32_END;
+    __m256 tmp3 ALIGN32_END {};
 
     __m256 tp ALIGN32_END;
     tp = _mm256_broadcast_ss(&piFloat);
@@ -364,4 +373,60 @@ const __m256& vectorized::zeroVec() {
         }
     }
     return ret;
+}
+
+void vectorized::vectorMultiply(float* __restrict__ io, const float* __restrict__ b, const std::size_t size)
+{
+    // The below code performs the complex multiplication "(x + yi)(u + vi) = (xu - yv)+(xv + yu)i" on
+    // eight pairs of complex numbers per loop iteration.
+    // It does this in two sets of four (the variables that end in 0 are one set, 1 is the other set).
+    //
+    // Why eight?  Because that is the most I can do while both: using <= 8 variables, maintaining some sort of readability
+
+    __m256 inb0  ALIGN32_END;
+    __m256 inc0  ALIGN32_END;
+    __m256 inb1  ALIGN32_END;
+    __m256 inc1  ALIGN32_END;
+    __m256 real0 ALIGN32_END;
+    __m256 imag0 ALIGN32_END;
+    __m256 real1 ALIGN32_END;
+    __m256 imag1 ALIGN32_END;
+
+    const std::size_t stop = size - 16;
+    std::size_t i = 0;
+    for (; i <= stop; i += 16)
+    {
+        inb0 = _mm256_load_ps(io + i + 0);           //x y x y  (8X32)
+        inb1 = _mm256_load_ps(io + i + 8);           //x y x y  (8X32)
+        inc0 = _mm256_load_ps(b + i + 0);            //u v u v  (8X32)
+        inc1 = _mm256_load_ps(b + i + 8);            //u v u v  (8X32)
+
+        real0 = _mm256_mul_ps(inc0, negateFloat);    // u -v u -v (8X32)
+        real1 = _mm256_mul_ps(inc1, negateFloat);    // u -v u -v (8X32)
+
+        imag0 = _mm256_permute_ps(inc0, 0xB1);       //v u v u (8X32)
+        imag1 = _mm256_permute_ps(inc1, 0xB1);       //v u v u (8X32)
+
+        real0 = _mm256_mul_ps(real0, inb0);          //xu -yv xu -yv (8X32)
+        real1 = _mm256_mul_ps(real1, inb1);          //xu -yv xu -yv (8X32)
+
+        imag0 = _mm256_mul_ps(imag0, inb0);          //xv yu xv yu (8X32)
+        imag1 = _mm256_mul_ps(imag1, inb1);          //xv yu xv yu (8X32)
+
+        real0 = _mm256_hadd_ps(real0, imag0);        //xu-yv xu-yv xv+yu xv+yu (8X32)
+        real1 = _mm256_hadd_ps(real1, imag1);        //xu-yv xu-yv xv+yu xv+yu (8X32)
+
+        imag0 = _mm256_permute_ps(real0, 0xD8);      //xu-yv uv+yu xu-yv xv+yu (9X32)
+        imag1 = _mm256_permute_ps(real1, 0xD8);      //xu-yv uv+yu xu-yv xv+yu (9X32)
+
+        _mm256_store_ps(io + i + 0, imag0);
+        _mm256_store_ps(io + i + 8, imag1);
+    }
+    _mm256_zeroupper();
+    for (; i < size; i += 2)
+    {
+        std::complex<float> *d = reinterpret_cast<std::complex<float>*>(&(io[i]));
+        const std::complex<float> *c = reinterpret_cast<const std::complex<float>*>(&(b[i]));
+        *d = *d * *c;
+    }
 }

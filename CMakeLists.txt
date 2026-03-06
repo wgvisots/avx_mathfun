@@ -37,6 +37,7 @@ target_link_libraries(${PROJ} ${LIBS})
 
 enable_testing()
 add_subdirectory(test)
+add_subdirectory(testapp)
 
 set_property(TARGET ${PROJ}
              PROPERTY PUBLIC_HEADER "${LIB_HDRS}")

@@ -81,6 +81,17 @@ void multiply(float* __restrict__ io, float num, std::size_t size);
 void multiplyIQ(float* __restrict__ io, float ival, float qval, std::size_t size);
 
 /**
+ * @brief in-place multiply 'io' with 'b'.
+ * Multiply every complex number in io with the corresponding complex number in b, and store the result back to io.
+ *
+ * NOTE: Assumes aligned memory!
+ * @param io
+ * @param b
+ * @param size - number of numbers in io and b (number of complex numbers in io * 2)
+ */
+void vectorMultiply(float* __restrict__ io, const float* __restrict__ b, std::size_t size);
+
+/**
  * Add the elements, element by element, of the two arrays ('io' and 'secon'), and write back to 'io'.
  * NOTE: Assumes aligned memory!
  * @param io

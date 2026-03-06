@@ -24,7 +24,6 @@ project(${PROJ})
 find_package(GTest REQUIRED)
 
 set(INC_DIRS "./"
-             "../lib"
              ${gtest_INCLUDE_DIR})
 
 set(LIBS mathfun)

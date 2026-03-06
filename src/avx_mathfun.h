@@ -32,6 +32,7 @@
 #pragma once /*wgvisots*/
 
 #include <cstring>
+#include <iostream>
 #include <immintrin.h>
 
 #include "Aligned.h" //wgvisots - this is to provide ALIGN32_BEG/ALIGN32_end
@@ -64,7 +65,10 @@ _PI32AVX_CONST(4, 4);
   static const Type _ps256_##Name[8] ALIGN32_END = { Val, Val, Val, Val, Val, Val, Val, Val }
 
 _PS256_CONST(1  , 1.0f);
+_PS256_CONST(neg1, -1.0f);
 _PS256_CONST(0p5, 0.5f);
+_PS256_CONST(2  , 2.0f);
+_PS256_CONST(4  , 4.0f);
 /* the smallest non denormalized float number */
 _PS256_CONST_TYPE(min_norm_pos, int, 0x00800000);
 _PS256_CONST_TYPE(mant_mask, int, 0x7f800000);
@@ -77,8 +81,10 @@ _PI32_CONST256(0, 0);
 _PI32_CONST256(1, 1);
 _PI32_CONST256(inv1, ~1);
 _PI32_CONST256(2, 2);
+_PI32_CONST256(3, 3);
 _PI32_CONST256(4, 4);
 _PI32_CONST256(0x7f, 0x7f);
+_PI32_CONST256(fp_sign_mask, ~0x7FFFFFFF);
 
 _PS256_CONST(cephes_SQRTHF, 0.707106781186547524F);
 _PS256_CONST(cephes_log_p0, 7.0376836292E-2F);
@@ -92,6 +98,46 @@ _PS256_CONST(cephes_log_p7, - 2.4999993993E-1F);
 _PS256_CONST(cephes_log_p8, + 3.3333331174E-1F);
 _PS256_CONST(cephes_log_q1, -2.12194440e-4F);
 _PS256_CONST(cephes_log_q2, 0.693359375F);
+
+_PS256_CONST(infinity,           INFINITY);
+_PS256_CONST(negative_infinity, -INFINITY);
+_PS256_CONST(zero,               0.0F);
+_PS256_CONST(negativeZero,      -0.0F);
+_PS256_CONST(PI,                 M_PI);
+_PS256_CONST(negPI,             -M_PI);
+_PS256_CONST(PIO2,               M_PI_2);
+_PS256_CONST(negPIO2,           -M_PI_2);
+_PS256_CONST(PIO4,               M_PI_4);
+
+//tan(3*pi/8)
+//NOTE: Cephes defines T3P8 like this for Intel/IEEE:
+//static unsigned short T3P8A[] = {0x9de6,0x333f,0x504f,0x4003};
+//#define T3P8 *(double *)T3P8A
+//And like this for UNK:
+//NOTE: we lose precision calling these floats rather than the original double
+_PS256_CONST(T3P8,          2.41421356237309504880);
+_PS256_CONST(HALF_MOREBITS, 6.123233995736765886130E-17 * 0.5);
+_PS256_CONST(MOREBITS,      6.123233995736765886130E-17);
+
+_PS256_CONST(0_66,  0.66);
+
+//NOTE: we lose precision calling these floats rather than the original double
+static float atan_P[5] = {
+    -8.750608600031904122785E-1,
+    -1.615753718733365076637E1,
+    -7.500855792314704667340E1,
+    -1.228866684490136173410E2,
+    -6.485021904942025371773E1,
+    };
+static float atan_Q[5] = {
+    /* 1.000000000000000000000E0, */
+    2.485846490142306297962E1,
+    1.650270098316988542046E2,
+    4.328810604912902668951E2,
+    4.853903996359136964868E2,
+    1.945506571482613964425E2,
+   };
+
 
 #ifndef __AVX2__
 
@@ -253,6 +299,7 @@ _PS256_CONST(cephes_exp_p2, 8.3334519073E-3F);
 _PS256_CONST(cephes_exp_p3, 4.1665795894E-2F);
 _PS256_CONST(cephes_exp_p4, 1.6666665459E-1F);
 _PS256_CONST(cephes_exp_p5, 5.0000001201E-1F);
+
 
 //wgvisots - added inline
 inline v8sf exp256_ps(v8sf x) {
@@ -732,10 +779,11 @@ inline void sincos256_ps(v8sf x, v8sf *s, v8sf *c) {
 
 //TODO -> make this faster!!!
 //wgvisots
+//return -pi < z <= pi (ANSI C like)
 inline void atan2(const __m256 &a, const __m256 &b, __m256 &c){
-    float *aArray = (float*)&a;
-    float *bArray = (float*)&b;
-    float cArray[8] ALIGN32_END;
+    float* __restrict__ aArray = (float*)&a;
+    float* __restrict__ bArray = (float*)&b;
+    float* __restrict__ cArray = (float*)&c;
 
     cArray[0] = std::atan2(aArray[0], aArray[1]);
     cArray[1] = std::atan2(aArray[2], aArray[3]);
@@ -745,7 +793,217 @@ inline void atan2(const __m256 &a, const __m256 &b, __m256 &c){
     cArray[5] = std::atan2(aArray[6], aArray[7]);
     cArray[6] = std::atan2(bArray[4], bArray[5]);
     cArray[7] = std::atan2(bArray[6], bArray[7]);
+}
+inline void atan(const __m256 &a, __m256 &c){
+    float *aArray = (float*)&a;
+    float cArray[8] ALIGN32_END;
+
+    cArray[0] = std::atan(aArray[0]);
+    cArray[1] = std::atan(aArray[2]);
+    cArray[2] = std::atan(aArray[0]);
+    cArray[3] = std::atan(aArray[2]);
+    cArray[4] = std::atan(aArray[4]);
+    cArray[5] = std::atan(aArray[6]);
+    cArray[6] = std::atan(aArray[4]);
+    cArray[7] = std::atan(aArray[6]);
 
     memcpy(&c, cArray, sizeof(cArray));
 }
+
+inline void printVec(const v8sf& v) {
+    float* vArray = (float*)&v;
+    std::cout << "[ ";
+    for (std::size_t i = 0; i < 8; ++i) {
+        std::cout << vArray[i] << " ";
+    }
+    std::cout << "]" << std::endl;
 }
+
+/**
+ * Vectorized version of polevl from Cephes.
+ * Original copyright:
+ * Cephes Math Library Release 2.1:  December, 1988
+ * Copyright 1984, 1987, 1988 by Stephen L. Moshier
+ * Direct inquiries to 30 Frost Street, Cambridge, MA 02140
+ *
+ * @param x
+ * @param coef
+ * @param N
+ * @return
+ */
+inline v8sf polevl(const v8sf& x, const float* coef, const std::size_t& N) {
+    const float* p = coef;
+    v8sf ans = _mm256_broadcast_ss(p++);
+    std::size_t i = N;
+    do {
+        v8sf pVec = _mm256_broadcast_ss(p++);
+        ans = _mm256_fmadd_ps(ans, x, pVec);
+    }while (--i);
+    return ans;
+}
+
+/**
+ * TODO -> IN WORK - DO NOT USE THIS, IT WILL LIE TO YOU!
+ *
+ * This is an atan implementation intneded for use by atan2 below.  As such, it doesn't test for
+ * inf/-inf, as it assumes atan2 will take care of those.
+ *
+ * @param ratio y/x
+ * @return
+ */
+inline v8sf atan(v8sf ratio) {
+    //NOTE: I know flag should really be an integer, but keeping it as a float makes the code slightly cleaner.
+    //      And '1' and '2' are exactly representable as floats - so it is safe... probably.
+
+    //make argument positive and save the sign
+    __m256 sign = _mm256_cmp_ps(ratio, *(__m256*)_ps256_zero, _CMP_LT_OQ);
+    ratio = _mm256_andnot_ps(_mm256_castsi256_ps(*(__m256i*)_pi32_256_fp_sign_mask), ratio);
+
+    //range reduction
+    // if( x > T3P8 ){
+    //     y = PIO2;
+    //     flag = 1;
+    //     x = -( 1.0/x );/*It seems odd that the - is outside the parenthesis - this might be important)
+    // }
+    const __m256 mask1 = _mm256_cmp_ps(ratio, *(__m256*)_ps256_T3P8, _CMP_GT_OQ);
+    __m256 y = _mm256_and_ps(mask1, *(__m256*)_ps256_PIO2);
+    ratio = _mm256_or_ps(_mm256_andnot_ps(mask1, ratio),
+                         _mm256_and_ps(mask1,_mm256_div_ps(_mm256_set1_ps(-1.0f),
+                                                          ratio)));
+
+    //else if( x <= 0.66 ){
+	//  y = 0.0;
+	//}
+    //if(x <= 0.66) y = 0.0 /*we get the assignment for free*/
+    const __m256 mask2 = _mm256_cmp_ps(ratio, *(__m256*)_ps256_0_66, _CMP_LE_OQ);
+
+    //else{ /* x > 0.66 */
+    //  y = PIO4;
+	//  flag = 2;
+	//  x = (x-1.0)/(x+1.0);
+    //}
+
+    y = _mm256_or_ps(y, _mm256_andnot_ps(mask2, *(__m256*)_ps256_PIO4));
+    //x = (x-1.0)/(x+1.0);
+    __m256 newx = _mm256_div_ps(_mm256_sub_ps(ratio, *(__m256*)_ps256_1),
+                                _mm256_add_ps(ratio, *(__m256*)_ps256_1));
+    __m256 mask = _mm256_or_ps(mask1, mask2);
+
+    ratio = _mm256_or_ps(_mm256_and_ps(ratio, mask),
+                         _mm256_andnot_ps(mask, newx));
+
+    //z = x * x;
+    __m256 z = _mm256_mul_ps(ratio, ratio);
+    //z = z * polevl( z, P, 4 ) / p1evl( z, Q, 5 );
+    z = _mm256_div_ps(_mm256_mul_ps(z,
+                                    polevl(z, atan_P, 4)),
+                      polevl(z, atan_Q, 5));
+
+    //z = x * z + x
+    z = _mm256_fmadd_ps(ratio, z, ratio);
+
+    z = _mm256_add_ps(z, _mm256_and_ps(mask2, *(__m256*)_ps256_HALF_MOREBITS));
+    z = _mm256_add_ps(z, _mm256_and_ps(mask1, *(__m256*)_ps256_MOREBITS));
+
+    y = _mm256_add_ps(y, z);
+
+    //restore sign
+    __m256 ss = _mm256_castsi256_ps(*(__m256i*)_pi32_256_fp_sign_mask);
+    ss = _mm256_and_ps(ss, sign);
+    y = _mm256_or_ps(ss, y);
+    return y;
+}
+
+/**
+ * TODO -> IN WORK - DO NOT USE THIS, IT WILL LIE TO YOU!
+ *
+ * NOTE: Does not curently test for NAN.  NANs will produce errors.
+ * NOTE: Does not currently test for INF/-INF.  These will produce undefined results
+ *
+ * @param y
+ * @param x
+ * @param z
+ */
+inline v8sf atan2(__m256 y, __m256 x) {
+
+    //mask NaNs here
+
+    const __m256 y_zero       = _mm256_cmp_ps(y, *(__m256*)_ps256_zero,         _CMP_EQ_UQ);
+    const __m256 y_negzero    = _mm256_cmp_ps(y, *(__m256*)_ps256_negativeZero, _CMP_EQ_UQ);
+    const __m256 y_gt_zero    = _mm256_cmp_ps(y, *(__m256*)_ps256_zero,         _CMP_GT_OQ);
+    const __m256 x_ge_zero    = _mm256_cmp_ps(x, *(__m256*)_ps256_zero,         _CMP_GE_OQ);
+    const __m256 x_le_negzero = _mm256_cmp_ps(x, *(__m256*)_ps256_negativeZero, _CMP_LE_OQ);
+    const __m256 x_eq_zero    = _mm256_cmp_ps(x, *(__m256*)_ps256_zero,         _CMP_EQ_UQ);
+
+
+    //if((y == -0.0) && (x >  0.0)) z = y
+    //if((y == -0.0) && (x == 0.0)) z = y
+    __m256 z = _mm256_and_ps(y, _mm256_and_ps(y_negzero, x_ge_zero));
+
+    //if((y == -0.0) && (x <   0.0)) z = -PI
+    //if((y == -0.0) && (x == -0.0)) z = -PI
+    z = _mm256_or_ps(z, _mm256_and_ps(_mm256_and_ps(y_negzero, x_le_negzero), *(__m256*)_ps256_negPI));
+
+    //if((y == 0.0) && (x == -0.0)) z = PI
+    //if((y == 0.0) && (x <   0.0)) z = PI
+    z = _mm256_or_ps(z, _mm256_and_ps(_mm256_and_ps(y_zero, x_le_negzero), *(__m256*)_ps256_PI));
+
+    //if((y == 0.0) && (x == 0.0)) z = 0.0
+    //if((y == 0.0) && (z >  0.0)) z = 0.0
+    //already set to zero
+
+    //if((x == 0.0) && (y > 0.0)) z = PI/2
+    z = _mm256_or_ps(z, _mm256_and_ps(_mm256_and_ps(x_eq_zero, y_gt_zero), *(__m256*)_ps256_PIO2));
+
+    //if((x == 0.0) && (y <= 0.0) z = -PI/2
+    z = _mm256_or_ps(z, _mm256_and_ps(_mm256_andnot_ps(y_gt_zero, x_eq_zero), *(__m256*)_ps256_negPIO2));
+
+
+    //TODO -> finish filling out tests for infinity
+    //TODO -> NOTE: Don't forget to put the test for 0.0/-0.0 in the doneMask below
+    //if((x ==  INFINITY) && (y ==  INFINITY)) z = 0.25 * PI
+    //if((x ==  INFINITY) && (y == -INFINITY)) z = -0.25 * PI
+    //if((x ==  INFINITY) && (y <   0.0))      z = -0.0
+    //if((x ==  INFINITY) && (y >=  0.0)       z = 0.0
+    //if((y ==  INFINITY) && (z == 0.0))       z = PI/2
+    //if((y == -INFINITY) && (z == 0.0))       z = -PI/2
+
+    //now we need to mask off all the values we already set, so we don't overwrite them below
+    const __m256 doneMask = _mm256_and_ps(_mm256_and_ps(y_zero, x_ge_zero),
+                                          _mm256_cmp_ps(z, *(__m256*)_ps256_zero, _CMP_NEQ_UQ));
+
+
+    //if(x < 0.0) code = 2
+    __m256i code;
+    code = _mm256_and_si256(_mm256_castps_si256(x_le_negzero),
+                            *(__m256i*)_pi32_256_2);
+
+    //if(y < 0.0) code |= 1
+    code = _mm256_or_si256(code,
+                           _mm256_andnot_si256(_mm256_castps_si256(y_gt_zero),
+                                               *(__m256i*)_pi32_256_1));
+
+    const __m256 w2 = _mm256_and_ps(_mm256_castsi256_ps(_mm256_cmpeq_epi32(code, *(__m256i*)_pi32_256_2)), *(__m256*)_ps256_PI);
+    const __m256 w3 = _mm256_and_ps(_mm256_castsi256_ps(_mm256_cmpeq_epi32(code, *(__m256i*)_pi32_256_3)), *(__m256*)_ps256_PI);
+    const __m256 w  = _mm256_or_ps(w2,w3);
+
+    const __m256 ratio = _mm256_div_ps(y, x);
+
+    const __m256 atanRatio = _mm256_add_ps(w, atan(ratio));
+
+    const __m256 z1 = _mm256_and_ps(doneMask, z);
+    const __m256 z2 = _mm256_andnot_ps(doneMask, atanRatio);
+    z = _mm256_or_ps(z1, z2);
+
+    //if((z == 0.0) && (y < 0.0)) z = NEGZERO
+    const __m256 negzeroMask = _mm256_and_ps(_mm256_cmp_ps(z, *(__m256*)_ps256_zero, _CMP_EQ_UQ),
+                               _mm256_cmp_ps(y, *(__m256*)_ps256_zero, _CMP_LT_OQ));
+
+    z = _mm256_andnot_ps(negzeroMask, z);
+    z = _mm256_or_ps(z, _mm256_and_ps(negzeroMask, *(__m256*)_ps256_negativeZero));
+    return z;
+}
+
+}
+
+

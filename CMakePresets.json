@@ -61,7 +61,7 @@
       "generator": "Unix Makefiles",
       "inherits": ["core", "release", "rpm"],
       "cacheVariables": {
-        "CMAKE_CXX_FLAGS": "-mavx2 -FPIC -fopenmp -pedantic -Wall -Wextra -Wsuggest-override -Wno-comment -Winit-self -O2"
+        "CMAKE_CXX_FLAGS": "-march=native -FPIC -fopenmp -pedantic -Wall -Wextra -Wsuggest-override -Wno-comment -Winit-self -O2"
       }
     },
     {
@@ -71,7 +71,7 @@
       "generator": "Unix Makefiles",
       "inherits": ["core", "release", "deb"],
       "cacheVariables": {
-        "CMAKE_CXX_FLAGS": "-mavx2 -FPIC -fopenmp -pedantic -Wall -Wextra -Wsuggest-override -Wno-comment -Winit-self -O2"
+        "CMAKE_CXX_FLAGS": "-march=native -FPIC -fopenmp -pedantic -Wall -Wextra -Wsuggest-override -Wno-comment -Winit-self -O2"
       }
     },
     {
@@ -81,7 +81,7 @@
       "generator": "Unix Makefiles",
       "inherits": ["core", "debug", "rpm"],
       "cacheVariables": {
-        "CMAKE_CXX_FLAGS": "-mavx2 -FPIC -fopenmp -pedantic -Wall -Wextra -Wsuggest-override -Wno-comment -Winit-self -g -O0 --coverage"
+        "CMAKE_CXX_FLAGS": "-march=native -FPIC -fopenmp -pedantic -Wall -Wextra -Wsuggest-override -Wno-comment -Winit-self -g -O0 --coverage"
       }
     }
   ]
