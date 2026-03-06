@@ -122,14 +122,14 @@ _PS256_CONST(MOREBITS,      6.123233995736765886130E-17);
 _PS256_CONST(0_66,  0.66);
 
 //NOTE: we lose precision calling these floats rather than the original double
-static float atan_P[5] = {
+static const float atan_P[5] = {
     -8.750608600031904122785E-1,
     -1.615753718733365076637E1,
     -7.500855792314704667340E1,
     -1.228866684490136173410E2,
     -6.485021904942025371773E1,
     };
-static float atan_Q[5] = {
+static const float atan_Q[5] = {
     /* 1.000000000000000000000E0, */
     2.485846490142306297962E1,
     1.650270098316988542046E2,
@@ -781,9 +781,9 @@ inline void sincos256_ps(v8sf x, v8sf *s, v8sf *c) {
 //wgvisots
 //return -pi < z <= pi (ANSI C like)
 inline void atan2(const __m256 &a, const __m256 &b, __m256 &c){
-    float* __restrict__ aArray = (float*)&a;
-    float* __restrict__ bArray = (float*)&b;
-    float* __restrict__ cArray = (float*)&c;
+    const float* __restrict__ aArray = reinterpret_cast<const float*>(&a);
+    const float* __restrict__ bArray = reinterpret_cast<const float*>(&b);
+    float* __restrict__ cArray = reinterpret_cast<float*>(&c);
 
     cArray[0] = std::atan2(aArray[0], aArray[1]);
     cArray[1] = std::atan2(aArray[2], aArray[3]);
@@ -795,7 +795,7 @@ inline void atan2(const __m256 &a, const __m256 &b, __m256 &c){
     cArray[7] = std::atan2(bArray[6], bArray[7]);
 }
 inline void atan(const __m256 &a, __m256 &c){
-    float *aArray = (float*)&a;
+    const float *aArray = reinterpret_cast<const float*>(&a);
     float cArray[8] ALIGN32_END;
 
     cArray[0] = std::atan(aArray[0]);
@@ -811,7 +811,7 @@ inline void atan(const __m256 &a, __m256 &c){
 }
 
 inline void printVec(const v8sf& v) {
-    float* vArray = (float*)&v;
+    const float* vArray = reinterpret_cast<const float*>(&v);
     std::cout << "[ ";
     for (std::size_t i = 0; i < 8; ++i) {
         std::cout << vArray[i] << " ";
@@ -856,8 +856,8 @@ inline v8sf atan(v8sf ratio) {
     //      And '1' and '2' are exactly representable as floats - so it is safe... probably.
 
     //make argument positive and save the sign
-    __m256 sign = _mm256_cmp_ps(ratio, *(__m256*)_ps256_zero, _CMP_LT_OQ);
-    ratio = _mm256_andnot_ps(_mm256_castsi256_ps(*(__m256i*)_pi32_256_fp_sign_mask), ratio);
+    __m256 sign = _mm256_cmp_ps(ratio, *reinterpret_cast<const __m256*>(_ps256_zero), _CMP_LT_OQ);
+    ratio = _mm256_andnot_ps(_mm256_castsi256_ps(*reinterpret_cast<const __m256i*>(_pi32_256_fp_sign_mask)), ratio);
 
     //range reduction
     // if( x > T3P8 ){
@@ -865,8 +865,8 @@ inline v8sf atan(v8sf ratio) {
     //     flag = 1;
     //     x = -( 1.0/x );/*It seems odd that the - is outside the parenthesis - this might be important)
     // }
-    const __m256 mask1 = _mm256_cmp_ps(ratio, *(__m256*)_ps256_T3P8, _CMP_GT_OQ);
-    __m256 y = _mm256_and_ps(mask1, *(__m256*)_ps256_PIO2);
+    const __m256 mask1 = _mm256_cmp_ps(ratio, *reinterpret_cast<const __m256*>(_ps256_T3P8), _CMP_GT_OQ);
+    __m256 y = _mm256_and_ps(mask1, *reinterpret_cast<const __m256*>(_ps256_PIO2));
     ratio = _mm256_or_ps(_mm256_andnot_ps(mask1, ratio),
                          _mm256_and_ps(mask1,_mm256_div_ps(_mm256_set1_ps(-1.0f),
                                                           ratio)));
@@ -875,7 +875,7 @@ inline v8sf atan(v8sf ratio) {
 	//  y = 0.0;
 	//}
     //if(x <= 0.66) y = 0.0 /*we get the assignment for free*/
-    const __m256 mask2 = _mm256_cmp_ps(ratio, *(__m256*)_ps256_0_66, _CMP_LE_OQ);
+    const __m256 mask2 = _mm256_cmp_ps(ratio, *reinterpret_cast<const __m256*>(_ps256_0_66), _CMP_LE_OQ);
 
     //else{ /* x > 0.66 */
     //  y = PIO4;
@@ -883,10 +883,10 @@ inline v8sf atan(v8sf ratio) {
 	//  x = (x-1.0)/(x+1.0);
     //}
 
-    y = _mm256_or_ps(y, _mm256_andnot_ps(mask2, *(__m256*)_ps256_PIO4));
+    y = _mm256_or_ps(y, _mm256_andnot_ps(mask2, *reinterpret_cast<const __m256*>(_ps256_PIO4)));
     //x = (x-1.0)/(x+1.0);
-    __m256 newx = _mm256_div_ps(_mm256_sub_ps(ratio, *(__m256*)_ps256_1),
-                                _mm256_add_ps(ratio, *(__m256*)_ps256_1));
+    __m256 newx = _mm256_div_ps(_mm256_sub_ps(ratio, *reinterpret_cast<const __m256*>(_ps256_1)),
+                                _mm256_add_ps(ratio, *reinterpret_cast<const __m256*>(_ps256_1)));
     __m256 mask = _mm256_or_ps(mask1, mask2);
 
     ratio = _mm256_or_ps(_mm256_and_ps(ratio, mask),
@@ -902,13 +902,13 @@ inline v8sf atan(v8sf ratio) {
     //z = x * z + x
     z = _mm256_fmadd_ps(ratio, z, ratio);
 
-    z = _mm256_add_ps(z, _mm256_and_ps(mask2, *(__m256*)_ps256_HALF_MOREBITS));
-    z = _mm256_add_ps(z, _mm256_and_ps(mask1, *(__m256*)_ps256_MOREBITS));
+    z = _mm256_add_ps(z, _mm256_and_ps(mask2, *reinterpret_cast<const __m256*>(_ps256_HALF_MOREBITS)));
+    z = _mm256_add_ps(z, _mm256_and_ps(mask1, *reinterpret_cast<const __m256*>(_ps256_MOREBITS)));
 
     y = _mm256_add_ps(y, z);
 
     //restore sign
-    __m256 ss = _mm256_castsi256_ps(*(__m256i*)_pi32_256_fp_sign_mask);
+    __m256 ss = _mm256_castsi256_ps(*reinterpret_cast<const __m256i*>(_pi32_256_fp_sign_mask));
     ss = _mm256_and_ps(ss, sign);
     y = _mm256_or_ps(ss, y);
     return y;
@@ -928,12 +928,12 @@ inline v8sf atan2(__m256 y, __m256 x) {
 
     //mask NaNs here
 
-    const __m256 y_zero       = _mm256_cmp_ps(y, *(__m256*)_ps256_zero,         _CMP_EQ_UQ);
-    const __m256 y_negzero    = _mm256_cmp_ps(y, *(__m256*)_ps256_negativeZero, _CMP_EQ_UQ);
-    const __m256 y_gt_zero    = _mm256_cmp_ps(y, *(__m256*)_ps256_zero,         _CMP_GT_OQ);
-    const __m256 x_ge_zero    = _mm256_cmp_ps(x, *(__m256*)_ps256_zero,         _CMP_GE_OQ);
-    const __m256 x_le_negzero = _mm256_cmp_ps(x, *(__m256*)_ps256_negativeZero, _CMP_LE_OQ);
-    const __m256 x_eq_zero    = _mm256_cmp_ps(x, *(__m256*)_ps256_zero,         _CMP_EQ_UQ);
+    const __m256 y_zero       = _mm256_cmp_ps(y, *reinterpret_cast<const __m256*>(_ps256_zero),         _CMP_EQ_UQ);
+    const __m256 y_negzero    = _mm256_cmp_ps(y, *reinterpret_cast<const __m256*>(_ps256_negativeZero), _CMP_EQ_UQ);
+    const __m256 y_gt_zero    = _mm256_cmp_ps(y, *reinterpret_cast<const __m256*>(_ps256_zero),         _CMP_GT_OQ);
+    const __m256 x_ge_zero    = _mm256_cmp_ps(x, *reinterpret_cast<const __m256*>(_ps256_zero),         _CMP_GE_OQ);
+    const __m256 x_le_negzero = _mm256_cmp_ps(x, *reinterpret_cast<const __m256*>(_ps256_negativeZero), _CMP_LE_OQ);
+    const __m256 x_eq_zero    = _mm256_cmp_ps(x, *reinterpret_cast<const __m256*>(_ps256_zero),         _CMP_EQ_UQ);
 
 
     //if((y == -0.0) && (x >  0.0)) z = y
@@ -942,21 +942,21 @@ inline v8sf atan2(__m256 y, __m256 x) {
 
     //if((y == -0.0) && (x <   0.0)) z = -PI
     //if((y == -0.0) && (x == -0.0)) z = -PI
-    z = _mm256_or_ps(z, _mm256_and_ps(_mm256_and_ps(y_negzero, x_le_negzero), *(__m256*)_ps256_negPI));
+    z = _mm256_or_ps(z, _mm256_and_ps(_mm256_and_ps(y_negzero, x_le_negzero), *reinterpret_cast<const __m256*>(_ps256_negPI)));
 
     //if((y == 0.0) && (x == -0.0)) z = PI
     //if((y == 0.0) && (x <   0.0)) z = PI
-    z = _mm256_or_ps(z, _mm256_and_ps(_mm256_and_ps(y_zero, x_le_negzero), *(__m256*)_ps256_PI));
+    z = _mm256_or_ps(z, _mm256_and_ps(_mm256_and_ps(y_zero, x_le_negzero), *reinterpret_cast<const __m256*>(_ps256_PI)));
 
     //if((y == 0.0) && (x == 0.0)) z = 0.0
     //if((y == 0.0) && (z >  0.0)) z = 0.0
     //already set to zero
 
     //if((x == 0.0) && (y > 0.0)) z = PI/2
-    z = _mm256_or_ps(z, _mm256_and_ps(_mm256_and_ps(x_eq_zero, y_gt_zero), *(__m256*)_ps256_PIO2));
+    z = _mm256_or_ps(z, _mm256_and_ps(_mm256_and_ps(x_eq_zero, y_gt_zero), *reinterpret_cast<const __m256*>(_ps256_PIO2)));
 
     //if((x == 0.0) && (y <= 0.0) z = -PI/2
-    z = _mm256_or_ps(z, _mm256_and_ps(_mm256_andnot_ps(y_gt_zero, x_eq_zero), *(__m256*)_ps256_negPIO2));
+    z = _mm256_or_ps(z, _mm256_and_ps(_mm256_andnot_ps(y_gt_zero, x_eq_zero), *reinterpret_cast<const __m256*>(_ps256_negPIO2)));
 
 
     //TODO -> finish filling out tests for infinity
@@ -970,21 +970,21 @@ inline v8sf atan2(__m256 y, __m256 x) {
 
     //now we need to mask off all the values we already set, so we don't overwrite them below
     const __m256 doneMask = _mm256_and_ps(_mm256_and_ps(y_zero, x_ge_zero),
-                                          _mm256_cmp_ps(z, *(__m256*)_ps256_zero, _CMP_NEQ_UQ));
+                                          _mm256_cmp_ps(z, *reinterpret_cast<const __m256*>(_ps256_zero), _CMP_NEQ_UQ));
 
 
     //if(x < 0.0) code = 2
     __m256i code;
     code = _mm256_and_si256(_mm256_castps_si256(x_le_negzero),
-                            *(__m256i*)_pi32_256_2);
+                            *reinterpret_cast<const __m256i*>(_pi32_256_2));
 
     //if(y < 0.0) code |= 1
     code = _mm256_or_si256(code,
                            _mm256_andnot_si256(_mm256_castps_si256(y_gt_zero),
-                                               *(__m256i*)_pi32_256_1));
+                                               *reinterpret_cast<const __m256i*>(_pi32_256_1)));
 
-    const __m256 w2 = _mm256_and_ps(_mm256_castsi256_ps(_mm256_cmpeq_epi32(code, *(__m256i*)_pi32_256_2)), *(__m256*)_ps256_PI);
-    const __m256 w3 = _mm256_and_ps(_mm256_castsi256_ps(_mm256_cmpeq_epi32(code, *(__m256i*)_pi32_256_3)), *(__m256*)_ps256_PI);
+    const __m256 w2 = _mm256_and_ps(_mm256_castsi256_ps(_mm256_cmpeq_epi32(code, *reinterpret_cast<const __m256i*>(_pi32_256_2))), *(__m256*)_ps256_PI);
+    const __m256 w3 = _mm256_and_ps(_mm256_castsi256_ps(_mm256_cmpeq_epi32(code, *reinterpret_cast<const __m256i*>(_pi32_256_3))), *(__m256*)_ps256_PI);
     const __m256 w  = _mm256_or_ps(w2,w3);
 
     const __m256 ratio = _mm256_div_ps(y, x);
@@ -996,11 +996,11 @@ inline v8sf atan2(__m256 y, __m256 x) {
     z = _mm256_or_ps(z1, z2);
 
     //if((z == 0.0) && (y < 0.0)) z = NEGZERO
-    const __m256 negzeroMask = _mm256_and_ps(_mm256_cmp_ps(z, *(__m256*)_ps256_zero, _CMP_EQ_UQ),
-                               _mm256_cmp_ps(y, *(__m256*)_ps256_zero, _CMP_LT_OQ));
+    const __m256 negzeroMask = _mm256_and_ps(_mm256_cmp_ps(z, *reinterpret_cast<const __m256*>(_ps256_zero), _CMP_EQ_UQ),
+                                             _mm256_cmp_ps(y, *reinterpret_cast<const __m256*>(_ps256_zero), _CMP_LT_OQ));
 
     z = _mm256_andnot_ps(negzeroMask, z);
-    z = _mm256_or_ps(z, _mm256_and_ps(negzeroMask, *(__m256*)_ps256_negativeZero));
+    z = _mm256_or_ps(z, _mm256_and_ps(negzeroMask, *reinterpret_cast<const __m256*>(_ps256_negativeZero)));
     return z;
 }
 
