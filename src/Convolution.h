@@ -31,6 +31,9 @@ Copyright (C) 2025 - 2026 W. Greg Visotski
  * Each "sample" consists of two floats: an in-phase and quadrature (IQ).  They can be considered a std::complex<float>,
  * but I use a flat array of floats for performance reasons.
  *
+ * This assumes you are feeding it a continious stream of data, with no breaks in data between calls.  It keeps a
+ * kernel's worth of data from each call to be fed into the next call, so your output is smooth with no discontinuities.
+ *
  * This class SIMD vectorizes the convolution, which gives some pretty big performance gains, but comes with some
  * caveats:
  * 1) All your inputs/outputs shall be 32-byte aligned.  ('kernel', 'in', and 'out')
@@ -42,6 +45,8 @@ Copyright (C) 2025 - 2026 W. Greg Visotski
  *
  * Sizes are given in the number of numbers in each array, not the number samples.  Sizes must, therefore, be an even
  * number.
+ *
+ * Given all these restrictions, seriously consider using frequency domain convolution (FFT-based) instead.
  */
 class Convolution {
 public:
@@ -71,8 +76,10 @@ private:
     aligned::alignedVecVector kernelReverseUV;
     aligned::alignedVecVector kernelReverseVU;
 
-    //I'm not sure about this.  This is used for continuation between calls to convolve.
+    //This is used for continuation between calls to convolve.
     aligned::alignedFloatVector leftover;
 
+    //This holds four copies of our data, each offset by one float.  While that sounds terrible, it allows us to
+    //perform aligned operations in each of our convolution operations.
     aligned::alignedFloatVector dataAligned[4];
 };
