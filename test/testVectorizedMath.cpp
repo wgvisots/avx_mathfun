@@ -36,7 +36,8 @@ TEST(VectorizedMathTest, TestVectorMultiply) {
     aligned::alignedComplexVector v2;
     aligned::alignedComplexVector v3;
 
-    for (std::size_t i = 0; i < 20; i++) {
+    //note: intentionally not a multiple of 16
+    for (std::size_t i = 0; i < 1000; i++) {
         std::complex<float> a{(float)rand(), (float)rand()};
         std::complex<float> b{(float)rand(), (float)rand()};
         float na = norm(a);
