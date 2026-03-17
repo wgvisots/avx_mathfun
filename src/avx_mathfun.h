@@ -841,10 +841,21 @@ inline v8sf polevl(const v8sf& x, const float* coef, const std::size_t& N) {
     }while (--i);
     return ans;
 }
+inline v8sf p1evl(const v8sf& x, const float* coef, const std::size_t& N ){
+    const float* p = coef;
+    std::size_t i = N-1;
+
+    p = coef;
+    v8sf ans = _mm256_add_ps(x, _mm256_broadcast_ss(p++));
+
+    do
+        ans = _mm256_fmadd_ps(ans, x, _mm256_broadcast_ss(p++));
+    while( --i );
+
+    return ans;
+}
 
 /**
- * TODO -> IN WORK - DO NOT USE THIS, IT WILL LIE TO YOU!
- *
  * This is an atan implementation intneded for use by atan2 below.  As such, it doesn't test for
  * inf/-inf, as it assumes atan2 will take care of those.
  *
@@ -859,7 +870,6 @@ inline v8sf atan(v8sf ratio) {
     __m256 sign = _mm256_cmp_ps(ratio, *reinterpret_cast<const __m256*>(_ps256_zero), _CMP_LT_OQ);
     ratio = _mm256_andnot_ps(_mm256_castsi256_ps(*reinterpret_cast<const __m256i*>(_pi32_256_fp_sign_mask)), ratio);
 
-    //range reduction
     // if( x > T3P8 ){
     //     y = PIO2;
     //     flag = 1;
@@ -894,13 +904,16 @@ inline v8sf atan(v8sf ratio) {
 
     //z = x * x;
     __m256 z = _mm256_mul_ps(ratio, ratio);
+
     //z = z * polevl( z, P, 4 ) / p1evl( z, Q, 5 );
     z = _mm256_div_ps(_mm256_mul_ps(z,
-                                    polevl(z, atan_P, 4)),
-                      polevl(z, atan_Q, 5));
+                      polevl(z, atan_P, 4)),
+                      p1evl(z, atan_Q, 5));
+
 
     //z = x * z + x
     z = _mm256_fmadd_ps(ratio, z, ratio);
+
 
     z = _mm256_add_ps(z, _mm256_and_ps(mask2, *reinterpret_cast<const __m256*>(_ps256_HALF_MOREBITS)));
     z = _mm256_add_ps(z, _mm256_and_ps(mask1, *reinterpret_cast<const __m256*>(_ps256_MOREBITS)));
