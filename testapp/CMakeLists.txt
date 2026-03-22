@@ -27,7 +27,7 @@ set(INC_DIRS ${OpenCV_INCLUDE_DIRS}
 
 set(LIBS mathfun)
 
-add_executable(${PROJ} "testapp.cpp")
+add_executable(${PROJ} "testapp.cpp" )
 target_include_directories(${PROJ} PUBLIC ${INC_DIRS})
 target_link_libraries(${PROJ} ${LIBS})
 

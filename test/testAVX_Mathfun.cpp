@@ -77,34 +77,87 @@ TEST(MathFunTest, TestATan) {
 
     for (std::size_t i = 0; i < 8; ++i) {
         //TODO -> this is some huge error...
-        EXPECT_NEAR(res[i], std::atan(v[i]), 0.2);
+        EXPECT_NEAR(res[i], std::atan(v[i]), 1e-5);
     }
 }
 
-// TEST(MathFunTest, TestATan2) {
-//     float x[8];
-//     float y[8];
-//     for (std::int32_t i = 0; i < 8; ++i) {
-//         float xx = (float)(i-4);
-//         float yy = (float)((7-i)-4);
-//         x[i] = xx;
-//         y[i] = yy;
-//         std::cout << "i: " << i << " - " << xx << ", " << yy << std::endl;
-//     }
-//
-//     __m256 xx = _mm256_load_ps(x);
-//     __m256 yy = _mm256_load_ps(y);
-//
-//     __m256 zz = avx_mathfun::atan2(xx, yy);
-//
-//     float result[8];
-//     _mm256_store_ps(result, zz);
-//     for (std::size_t i = 0; i < 8; ++i) {
-//         float truth = std::atan2(x[i], y[i]);
-//         std::cout << i << ": " << result[i] << ", " << truth << std::endl;
-//         EXPECT_NEAR(result[i], truth, 0.2);
-//     }
-// }
+TEST(MathFunTest, TestATan_no2) {
+    float x[8];
+    for (std::int32_t i = 0; i < 8; ++i) {
+        float xx = (float)(i-4);
+        float yy = (float)((7-i)-4);
+        x[i] = xx / yy;
+    }
+
+    __m256 xx = _mm256_load_ps(x);
+
+    __m256 zz = avx_mathfun::atan(xx);
+
+    float result[8];
+    _mm256_store_ps(result, zz);
+    for (std::size_t i = 0; i < 8; ++i) {
+        float truth = std::atan(x[i]);
+        EXPECT_NEAR(result[i], truth, 1e-5);
+    }
+}
+
+TEST(MathFunTest, TestATan2) {
+    float x[8];
+    float y[8];
+    float truth[8];
+    for (std::int32_t i = 0; i < 8; ++i) {
+        const float xx = static_cast<float>(i - 4);
+        const float yy = static_cast<float>((7 - i) - 4);
+        x[i] = xx;
+        y[i] = yy;
+        truth[i] = std::atan2(yy,xx);
+    }
+
+    const __m256 xx = _mm256_load_ps(x);
+    const __m256 yy = _mm256_load_ps(y);
+
+    const __m256 zz = avx_mathfun::atan2(yy, xx);
+
+    float result[8];
+    _mm256_store_ps(result, zz);
+    for (std::size_t i = 0; i < 8; ++i) {
+        EXPECT_NEAR(result[i], truth[i], 1e-5);
+    }
+}
+
+TEST(MathFunTest, TestATan2_no2) {
+    float x[8];
+    float y[8];
+    float truth[8];
+
+    for (float fx = -1.0; fx <= 1.0; fx += 0.01) {
+        for (std::size_t i = 0; i < 8; ++i) {
+            x[i] = fx + (float)i * 0.002f;
+        }
+        for (float fy = -1.0; fy <= 1.0; fy += 0.01) {
+            for (std::size_t j = 0; j < 8; ++j) {
+                y[j] = fy + (float)j * 0.002f;
+                const float s = x[j] + y[j];
+                truth[j] = std::atan2(y[j]/s,x[j]/s);
+            }
+
+            __m256 xx = _mm256_load_ps(x);
+            __m256 yy = _mm256_load_ps(y);
+            const __m256 sum = _mm256_add_ps(xx,yy);
+            xx = _mm256_div_ps(xx, sum);
+            yy = _mm256_div_ps(yy, sum);
+
+            const __m256 zz = avx_mathfun::atan2(yy, xx);
+
+            float result[8];
+            _mm256_store_ps(result, zz);
+            for (std::size_t i = 0; i < 8; ++i) {
+                EXPECT_NEAR(result[i], truth[i], 1e-5);
+            }
+        }
+
+    }
+}
 
 TEST(MathFunTest, TestATanVecSpeed) {
     makeAllData();
@@ -147,51 +200,51 @@ TEST(MathFunTest, TestATanSpeed) {
     EXPECT_GT(r, 1.0F);
 }
 
-// TEST(MathFunTest, TestATan2VecSpeed) {
-//     float x[8] ALIGN32_END;
-//     float y[8] ALIGN32_END;
-//     for (std::int32_t i = 0; i < 8; ++i) {
-//         float xx = (float)(i-4);
-//         float yy = (float)((7-i)-4);
-//         x[i] = xx;
-//         y[i] = yy;
-//     }
-//
-//     __m256 xx = _mm256_load_ps(x);
-//     __m256 yy = _mm256_load_ps(y);
-//
-//     float r{0.0};
-//
-//     for (std::size_t i = 0; i < NUM_ITERS; i++) {
-//         __m256 result = avx_mathfun::atan2(xx, yy);
-//         float* rr = reinterpret_cast<float*>(&result);
-//         for (std::size_t j = 0; j < 8; ++j) {
-//             r += rr[j];
-//         }
-//     }
-//     EXPECT_NE(r, 0.0F);
-// }
-// TEST(MathFunTest, TestATan2Speed_v2) {
-//     float x[8] ALIGN32_END;
-//     float y[8] ALIGN32_END;
-//     for (std::int32_t i = 0; i < 8; ++i) {
-//         float xx = (float)(i-4);
-//         float yy = (float)((7-i)-4);
-//         x[i] = xx;
-//         y[i] = yy;
-//     }
-//
-//     __m256 xx ALIGN32_END = _mm256_load_ps(x);
-//     __m256 yy ALIGN32_END = _mm256_load_ps(y);
-//     __m256 zz ALIGN32_END;
-//     float r{0.0};
-//     for (std::size_t i = 0; i < NUM_ITERS; i++) {
-//         avx_mathfun::atan2(xx, yy, zz);
-//         float* rr = reinterpret_cast<float*>(&zz);
-//         for (std::size_t j = 0; j < 8; ++j) {
-//             r += rr[j];
-//         }
-//     }
-//
-//     EXPECT_NE(r, 0.0F);
-// }
+TEST(MathFunTest, TestATan2VecSpeed) {
+    float x[8] ALIGN32_END;
+    float y[8] ALIGN32_END;
+    for (std::int32_t i = 0; i < 8; ++i) {
+        float xx = (float)(i-4);
+        float yy = (float)((7-i)-4);
+        x[i] = xx;
+        y[i] = yy;
+    }
+
+    __m256 xx = _mm256_load_ps(x);
+    __m256 yy = _mm256_load_ps(y);
+
+    float r{0.0};
+
+    for (std::size_t i = 0; i < NUM_ITERS; i++) {
+        const __m256 result = avx_mathfun::atan2(xx, yy);
+        const float* rr = reinterpret_cast<const float*>(&result);
+        for (std::size_t j = 0; j < 8; ++j) {
+            r += rr[j];
+        }
+    }
+    EXPECT_NE(r, 0.0F);
+}
+TEST(MathFunTest, TestATan2Speed_v2) {
+    float x[8] ALIGN32_END;
+    float y[8] ALIGN32_END;
+    for (std::int32_t i = 0; i < 8; ++i) {
+        float xx = (float)(i-4);
+        float yy = (float)((7-i)-4);
+        x[i] = xx;
+        y[i] = yy;
+    }
+
+    __m256 xx ALIGN32_END = _mm256_load_ps(x);
+    __m256 yy ALIGN32_END = _mm256_load_ps(y);
+    __m256 zz ALIGN32_END;
+    float r{0.0};
+    for (std::size_t i = 0; i < NUM_ITERS; i++) {
+        avx_mathfun::atan2(xx, yy, zz);
+        const float* rr = reinterpret_cast<float*>(&zz);
+        for (std::size_t j = 0; j < 8; ++j) {
+            r += rr[j];
+        }
+    }
+
+    EXPECT_NE(r, 0.0F);
+}

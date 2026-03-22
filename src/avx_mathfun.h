@@ -781,33 +781,37 @@ inline void sincos256_ps(v8sf x, v8sf *s, v8sf *c) {
 //wgvisots
 //return -pi < z <= pi (ANSI C like)
 inline void atan2(const __m256 &a, const __m256 &b, __m256 &c){
-    const float* __restrict__ aArray = reinterpret_cast<const float*>(&a);
-    const float* __restrict__ bArray = reinterpret_cast<const float*>(&b);
-    float* __restrict__ cArray = reinterpret_cast<float*>(&c);
+    {
+        const float* __restrict__ aArray = reinterpret_cast<const float*>(&a);
+        const float* __restrict__ bArray = reinterpret_cast<const float*>(&b);
+        float* __restrict__ cArray = reinterpret_cast<float*>(&c);
 
-    cArray[0] = std::atan2(aArray[0], aArray[1]);
-    cArray[1] = std::atan2(aArray[2], aArray[3]);
-    cArray[2] = std::atan2(bArray[0], bArray[1]);
-    cArray[3] = std::atan2(bArray[2], bArray[3]);
-    cArray[4] = std::atan2(aArray[4], aArray[5]);
-    cArray[5] = std::atan2(aArray[6], aArray[7]);
-    cArray[6] = std::atan2(bArray[4], bArray[5]);
-    cArray[7] = std::atan2(bArray[6], bArray[7]);
+        cArray[0] = std::atan2(aArray[0], aArray[1]);
+        cArray[1] = std::atan2(aArray[2], aArray[3]);
+        cArray[2] = std::atan2(bArray[0], bArray[1]);
+        cArray[3] = std::atan2(bArray[2], bArray[3]);
+        cArray[4] = std::atan2(aArray[4], aArray[5]);
+        cArray[5] = std::atan2(aArray[6], aArray[7]);
+        cArray[6] = std::atan2(bArray[4], bArray[5]);
+        cArray[7] = std::atan2(bArray[6], bArray[7]);
+    }
 }
 inline void atan(const __m256 &a, __m256 &c){
-    const float *aArray = reinterpret_cast<const float*>(&a);
-    float cArray[8] ALIGN32_END;
+    {
+        const float *aArray = reinterpret_cast<const float*>(&a);
+        float cArray[8] ALIGN32_END;
 
-    cArray[0] = std::atan(aArray[0]);
-    cArray[1] = std::atan(aArray[2]);
-    cArray[2] = std::atan(aArray[0]);
-    cArray[3] = std::atan(aArray[2]);
-    cArray[4] = std::atan(aArray[4]);
-    cArray[5] = std::atan(aArray[6]);
-    cArray[6] = std::atan(aArray[4]);
-    cArray[7] = std::atan(aArray[6]);
+        cArray[0] = std::atan(aArray[0]);
+        cArray[1] = std::atan(aArray[2]);
+        cArray[2] = std::atan(aArray[0]);
+        cArray[3] = std::atan(aArray[2]);
+        cArray[4] = std::atan(aArray[4]);
+        cArray[5] = std::atan(aArray[6]);
+        cArray[6] = std::atan(aArray[4]);
+        cArray[7] = std::atan(aArray[6]);
 
-    memcpy(&c, cArray, sizeof(cArray));
+        memcpy(&c, cArray, sizeof(cArray));
+    }
 }
 
 inline void printVec(const v8sf& v) {
@@ -928,38 +932,39 @@ inline v8sf atan(v8sf ratio) {
 }
 
 /**
- * TODO -> IN WORK - DO NOT USE THIS, IT WILL LIE TO YOU!
+ * TODO -> I *think* this works.  It needs a LOT more testing.
  *
  * NOTE: Does not curently test for NAN.  NANs will produce errors.
  * NOTE: Does not currently test for INF/-INF.  These will produce undefined results
  *
  * @param y
  * @param x
- * @param z
  */
 inline v8sf atan2(__m256 y, __m256 x) {
-
+    __m256 z =  *(reinterpret_cast<const __m256*>(_ps256_zero));
     //mask NaNs here
 
     const __m256 y_zero       = _mm256_cmp_ps(y, *reinterpret_cast<const __m256*>(_ps256_zero),         _CMP_EQ_UQ);
-    const __m256 y_negzero    = _mm256_cmp_ps(y, *reinterpret_cast<const __m256*>(_ps256_negativeZero), _CMP_EQ_UQ);
+    // const __m256 y_negzero    = _mm256_cmp_ps(y, *reinterpret_cast<const __m256*>(_ps256_negativeZero), _CMP_EQ_UQ);
     const __m256 y_gt_zero    = _mm256_cmp_ps(y, *reinterpret_cast<const __m256*>(_ps256_zero),         _CMP_GT_OQ);
     const __m256 x_ge_zero    = _mm256_cmp_ps(x, *reinterpret_cast<const __m256*>(_ps256_zero),         _CMP_GE_OQ);
-    const __m256 x_le_negzero = _mm256_cmp_ps(x, *reinterpret_cast<const __m256*>(_ps256_negativeZero), _CMP_LE_OQ);
+    const __m256 x_le_zero    = _mm256_cmp_ps(x, *reinterpret_cast<const __m256*>(_ps256_zero),         _CMP_LE_OQ);
     const __m256 x_eq_zero    = _mm256_cmp_ps(x, *reinterpret_cast<const __m256*>(_ps256_zero),         _CMP_EQ_UQ);
 
 
+    //NOTE:  These next two are needed for systems that handle -0, which mine does not.  That is, it is
+    //       needed in cases where -0.0 != 0.0.
     //if((y == -0.0) && (x >  0.0)) z = y
     //if((y == -0.0) && (x == 0.0)) z = y
-    __m256 z = _mm256_and_ps(y, _mm256_and_ps(y_negzero, x_ge_zero));
+    // __m256 z = _mm256_and_ps(y, _mm256_and_ps(y_negzero, x_ge_zero));
 
     //if((y == -0.0) && (x <   0.0)) z = -PI
     //if((y == -0.0) && (x == -0.0)) z = -PI
-    z = _mm256_or_ps(z, _mm256_and_ps(_mm256_and_ps(y_negzero, x_le_negzero), *reinterpret_cast<const __m256*>(_ps256_negPI)));
+    // z = _mm256_or_ps(z, _mm256_and_ps(_mm256_and_ps(y_negzero, x_le_negzero), *reinterpret_cast<const __m256*>(_ps256_negPI)));
 
     //if((y == 0.0) && (x == -0.0)) z = PI
     //if((y == 0.0) && (x <   0.0)) z = PI
-    z = _mm256_or_ps(z, _mm256_and_ps(_mm256_and_ps(y_zero, x_le_negzero), *reinterpret_cast<const __m256*>(_ps256_PI)));
+    z = _mm256_or_ps(z, _mm256_and_ps(_mm256_and_ps(y_zero, x_le_zero), *reinterpret_cast<const __m256*>(_ps256_PI)));
 
     //if((y == 0.0) && (x == 0.0)) z = 0.0
     //if((y == 0.0) && (z >  0.0)) z = 0.0
@@ -971,7 +976,6 @@ inline v8sf atan2(__m256 y, __m256 x) {
     //if((x == 0.0) && (y <= 0.0) z = -PI/2
     z = _mm256_or_ps(z, _mm256_and_ps(_mm256_andnot_ps(y_gt_zero, x_eq_zero), *reinterpret_cast<const __m256*>(_ps256_negPIO2)));
 
-
     //TODO -> finish filling out tests for infinity
     //TODO -> NOTE: Don't forget to put the test for 0.0/-0.0 in the doneMask below
     //if((x ==  INFINITY) && (y ==  INFINITY)) z = 0.25 * PI
@@ -982,13 +986,12 @@ inline v8sf atan2(__m256 y, __m256 x) {
     //if((y == -INFINITY) && (z == 0.0))       z = -PI/2
 
     //now we need to mask off all the values we already set, so we don't overwrite them below
-    const __m256 doneMask = _mm256_and_ps(_mm256_and_ps(y_zero, x_ge_zero),
+    const __m256 doneMask = _mm256_or_ps(_mm256_and_ps(y_zero, x_ge_zero),
                                           _mm256_cmp_ps(z, *reinterpret_cast<const __m256*>(_ps256_zero), _CMP_NEQ_UQ));
-
 
     //if(x < 0.0) code = 2
     __m256i code;
-    code = _mm256_and_si256(_mm256_castps_si256(x_le_negzero),
+    code = _mm256_and_si256(_mm256_castps_si256(x_le_zero),
                             *reinterpret_cast<const __m256i*>(_pi32_256_2));
 
     //if(y < 0.0) code |= 1
@@ -1011,6 +1014,7 @@ inline v8sf atan2(__m256 y, __m256 x) {
     //if((z == 0.0) && (y < 0.0)) z = NEGZERO
     const __m256 negzeroMask = _mm256_and_ps(_mm256_cmp_ps(z, *reinterpret_cast<const __m256*>(_ps256_zero), _CMP_EQ_UQ),
                                              _mm256_cmp_ps(y, *reinterpret_cast<const __m256*>(_ps256_zero), _CMP_LT_OQ));
+
 
     z = _mm256_andnot_ps(negzeroMask, z);
     z = _mm256_or_ps(z, _mm256_and_ps(negzeroMask, *reinterpret_cast<const __m256*>(_ps256_negativeZero)));

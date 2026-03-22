@@ -20,7 +20,6 @@ Copyright (C) 2025 - 2026 W. Greg Visotski
   (this is the zlib license)
 */
 
-
 #include <iostream>
 #include <cstdint>
 #include <limits>
@@ -51,6 +50,20 @@ __m256 makeData() {
     rr[5] = static_cast<float>(random()) * scale;
     rr[6] = static_cast<float>(random()) * scale;
     rr[7] = static_cast<float>(random()) * scale;
+    return result;
+}
+__m256 makeData2() {
+    __m256 result;
+    float* rr = reinterpret_cast<float*>(&result);
+    //Yes, I'm calling 'random' and not 'rand' or c++11+ RNG.  My BSD-isms coming out...
+    rr[0] = 0.0f;
+    rr[1] = 0.1f;
+    rr[2] = 0.2f;
+    rr[3] = 0.3f;
+    rr[4] = 0.4f;
+    rr[5] = 0.5f;
+    rr[6] = 0.8f;
+    rr[7] = 0.9f;
     return result;
 }
 float testVec(const __m256* data, const std::size_t size) {
@@ -90,6 +103,28 @@ float testNonVec(const __m256* data, const std::size_t size) {
     return r;
 }
 
+
+void compare(const __m256& data) {
+    __m256 result = avx_mathfun::atan(data);
+
+    const float* d = (const float*)&data;
+    const float* dd = (float*)&result;
+
+    std::vector<float> atans;
+    std::vector<float> stdatans;
+    for (std::size_t i = 0; i < 8; i++) {
+        atans.push_back((float)std::atan(d[i]));
+        stdatans.push_back(std::atan(d[i]));
+    }
+
+
+    std::cout << "################################" << std::endl;
+    for (std::size_t i = 0; i < 8; i++) {
+        std::cout << d[i] << ",\t " << dd[i] << ",\t " << atans[i] << ",\t " << stdatans[i] << std::endl;
+    }
+    std::cout << "################################" << std::endl;
+}
+
 /**
  * The whole point of this application is to make something that you can run in valgrind and get good profiling information.
  * Some profiling information is lost (or at least harder to parse out) when running inside gtest.
@@ -99,10 +134,11 @@ float testNonVec(const __m256* data, const std::size_t size) {
  * @return 0
  */
 int main() {
-    srandom((unsigned int)std::chrono::system_clock::now().time_since_epoch().count());
+    srandom(static_cast<unsigned int>(std::chrono::system_clock::now().time_since_epoch().count()));
     std::vector<__m256> vec;
     vec.reserve(PRIME);
-    for (std::size_t i = 0; i < PRIME; i++) {
+    vec.push_back(makeData2());
+    for (std::size_t i = 1; i < PRIME; i++) {
         vec.push_back(makeData());
     }
 
@@ -118,6 +154,8 @@ int main() {
 
     std::cout << "Non vec time: "    << std::chrono::duration_cast<std::chrono::milliseconds>(nonVecTime) << " milliseconds" <<  std::endl;
     std::cout << "Vectorized time: " << std::chrono::duration_cast<std::chrono::milliseconds>(vecTime)    << " milliseconds" <<  std::endl;
+
+    // compare(vec.data(), vec.size());
 
     return 0;
 }
