@@ -60,3 +60,20 @@ TEST(VectorizedMathTest, TestVectorMultiply) {
     }
 
 }
+
+TEST(VectorizedMathTest, TestApplyLinearLossAdjustment) {
+    aligned::alignedFloatVector v1;
+    for (std::size_t i = 0; i < 100; i++) {
+        v1.emplace_back(1.0f);
+    }
+
+    const float start = 0.0F;
+    const float end = 1.0F;
+
+    vectorized::applyLinearLossAdjustment(v1.data(), v1.size(), start, end);
+
+    for (std::size_t i = 0; i < v1.size(); i+=2) {
+        EXPECT_NEAR(v1[i],   (float)i/(float)v1.size(), 1.0e-6);
+        EXPECT_NEAR(v1[i+1], (float)i/(float)v1.size(), 1.0e-6);
+    }
+}

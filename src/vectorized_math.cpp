@@ -430,3 +430,42 @@ void vectorized::vectorMultiply(float* __restrict__ io, const float* __restrict_
         *d = *d * *c;
     }
 }
+
+void vectorized::applyLinearLossAdjustment(float* __restrict__ data, std::size_t size, const float& initialChange, const float& finalChange) {
+    static constexpr float fourS{4};
+    static const __m256 increment ALIGN32_END = _mm256_setr_ps(0,0,1,1,2,2,3,3);
+    static const __m256 four      ALIGN32_END = _mm256_broadcast_ss(&fourS);
+
+    const float changePerStep = (finalChange - initialChange) / static_cast<float>(size / 2);
+    const __m256 step = _mm256_broadcast_ss(&changePerStep);
+
+
+    const std::size_t stop = size - 15;
+    std::size_t i = 0;
+    if (size > 15) {
+        for(; i < stop; i+=16) {
+            __m256 a = _mm256_load_ps(data + i);    //first 8 numbers (four samples)
+            __m256 b = _mm256_load_ps(data + i + 8);//second 8 numbers (four samples)
+
+            const float iFa = static_cast<float>(i/8);
+            const float iFb = static_cast<float>(iFa+1.0F);
+
+            const __m256 thisStepa =  _mm256_fmadd_ps(four, _mm256_broadcast_ss(&iFa), increment);
+            const __m256 thisStepb =  _mm256_fmadd_ps(four, _mm256_broadcast_ss(&iFb), increment);
+
+            const __m256 thisStepChangea = _mm256_mul_ps(thisStepa, step);
+            const __m256 thisStepChangeb = _mm256_mul_ps(thisStepb, step);
+
+            a = _mm256_mul_ps(a, thisStepChangea);
+            b = _mm256_mul_ps(b, thisStepChangeb);
+
+            _mm256_store_ps(data + i + 0, a);
+            _mm256_store_ps(data + i + 8, b);
+        }
+    }
+    for (; i < size; i += 2) {
+        const float change = changePerStep * (float)(i/2);
+        data[i] *= change;
+        data[i + 1] *= change;
+    }
+}

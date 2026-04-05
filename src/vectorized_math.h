@@ -143,4 +143,19 @@ void iqToAmpAndPhase(const float* __restrict__ in, float* __restrict__ out, std:
  * @return
  */
 const __m256& zeroVec();
+
+/**
+ * The cannonical use case for this function is applying free space path loss estimates.  The 'data' is your IQ data,
+ * 'initialChange' is how much loss is estimated at the start of the data, and 'finalChange' is the loss estimate at
+ * the end of the data.
+ *
+ * implemented as:
+ * data[n] = data[n] * (((finalChange-initialChange)/(size/2)) * n)
+ *
+ * @param data std::complex<float>, flattened to an array of floats [I,Q,I,Q,...,I,Q]
+ * @param size number of numbers (2X number of samples)
+ * @param initialChange loss at the beginning of the data (expressed as a ratio)
+ * @param finalChange loss at the end of the data (expressed as a ratio)
+ */
+void applyLinearLossAdjustment(float* __restrict__ data, std::size_t size, const float& initialChange, const float& finalChange);
 }
