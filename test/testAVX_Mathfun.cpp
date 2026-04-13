@@ -64,7 +64,7 @@ void makeAllData() {
 // std::size_t NUM_ITERS{1000000};
 }
 TEST(MathFunTest, TestATan) {
-    float v[8] ALIGN32_END;
+    float v[8] __attribute__ ((aligned (32)));
     for (std::size_t i = 0; i < 8; ++i) {
         v[i]= M_PI / (float) (i+1);
     }
@@ -72,7 +72,7 @@ TEST(MathFunTest, TestATan) {
     __m256 vv = _mm256_load_ps(v);
     __m256 result = avx_mathfun::atan(vv);
 
-    float res[8] ALIGN32_END;
+    float res[8] __attribute__ ((aligned (32)));
     _mm256_store_ps(res, result);
 
     for (std::size_t i = 0; i < 8; ++i) {
@@ -201,8 +201,8 @@ TEST(MathFunTest, TestATanSpeed) {
 }
 
 TEST(MathFunTest, TestATan2VecSpeed) {
-    float x[8] ALIGN32_END;
-    float y[8] ALIGN32_END;
+    float x[8] __attribute__ ((aligned (32)));
+    float y[8] __attribute__ ((aligned (32)));
     for (std::int32_t i = 0; i < 8; ++i) {
         float xx = (float)(i-4);
         float yy = (float)((7-i)-4);
@@ -225,8 +225,8 @@ TEST(MathFunTest, TestATan2VecSpeed) {
     EXPECT_NE(r, 0.0F);
 }
 TEST(MathFunTest, TestATan2Speed_v2) {
-    float x[8] ALIGN32_END;
-    float y[8] ALIGN32_END;
+    float x[8] __attribute__ ((aligned (32)));
+    float y[8] __attribute__ ((aligned (32)));
     for (std::int32_t i = 0; i < 8; ++i) {
         float xx = (float)(i-4);
         float yy = (float)((7-i)-4);
@@ -234,9 +234,9 @@ TEST(MathFunTest, TestATan2Speed_v2) {
         y[i] = yy;
     }
 
-    __m256 xx ALIGN32_END = _mm256_load_ps(x);
-    __m256 yy ALIGN32_END = _mm256_load_ps(y);
-    __m256 zz ALIGN32_END;
+    __m256 xx __attribute__ ((aligned (32))) = _mm256_load_ps(x);
+    __m256 yy __attribute__ ((aligned (32))) = _mm256_load_ps(y);
+    __m256 zz __attribute__ ((aligned (32)));
     float r{0.0};
     for (std::size_t i = 0; i < NUM_ITERS; i++) {
         avx_mathfun::atan2(xx, yy, zz);

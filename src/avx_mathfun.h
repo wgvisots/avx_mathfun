@@ -32,10 +32,9 @@
 #pragma once /*wgvisots*/
 
 #include <cstring>
+#include <cmath>
 #include <iostream>
 #include <immintrin.h>
-
-#include "Aligned.h" //wgvisots - this is to provide ALIGN32_BEG/ALIGN32_end
 
 
 /* yes I know, the top of this file is quite ugly */
@@ -48,7 +47,7 @@ typedef __m256i v8si; // vector of 8 int   (avx)
 typedef __m128i v4si; // vector of 8 int   (avx)
 
 #define _PI32AVX_CONST(Name, Val)                                            \
-  static const int _pi32avx_##Name[4] ALIGN32_END = { Val, Val, Val, Val }
+  static const int _pi32avx_##Name[4] __attribute__ ((aligned (32))) = { Val, Val, Val, Val }
 
 _PI32AVX_CONST(1, 1);
 _PI32AVX_CONST(inv1, ~1);
@@ -58,11 +57,11 @@ _PI32AVX_CONST(4, 4);
 
 /* declare some AVX constants -- why can't I figure a better way to do that? */
 #define _PS256_CONST(Name, Val)                                            \
-  static const float _ps256_##Name[8] ALIGN32_END = { Val, Val, Val, Val, Val, Val, Val, Val }
+  static const float _ps256_##Name[8] __attribute__ ((aligned (32))) = { Val, Val, Val, Val, Val, Val, Val, Val }
 #define _PI32_CONST256(Name, Val)                                            \
-  static const int _pi32_256_##Name[8] ALIGN32_END = { Val, Val, Val, Val, Val, Val, Val, Val }
+  static const int _pi32_256_##Name[8] __attribute__ ((aligned (32))) = { Val, Val, Val, Val, Val, Val, Val, Val }
 #define _PS256_CONST_TYPE(Name, Type, Val)                                 \
-  static const Type _ps256_##Name[8] ALIGN32_END = { Val, Val, Val, Val, Val, Val, Val, Val }
+  static const Type _ps256_##Name[8] __attribute__ ((aligned (32))) = { Val, Val, Val, Val, Val, Val, Val, Val }
 
 _PS256_CONST(1  , 1.0f);
 _PS256_CONST(neg1, -1.0f);
@@ -799,7 +798,7 @@ inline void atan2(const __m256 &a, const __m256 &b, __m256 &c){
 inline void atan(const __m256 &a, __m256 &c){
     {
         const float *aArray = reinterpret_cast<const float*>(&a);
-        float cArray[8] ALIGN32_END;
+        float cArray[8] __attribute__ ((aligned (32)));
 
         cArray[0] = std::atan(aArray[0]);
         cArray[1] = std::atan(aArray[2]);

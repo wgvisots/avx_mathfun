@@ -26,14 +26,13 @@ set(PROJ mathfun)
 project(${PROJ})
 
 set(INC_DIRS "${CMAKE_SOURCE_DIR}/src" )
-file(GLOB LIB_SRCS "./src/*.cpp")
 file(GLOB LIB_HDRS "./src/*.h")
 
 set(LIBS "pthread" )
 
-add_library(${PROJ} SHARED ${LIB_SRCS})
+add_library(${PROJ} INTERFACE)
 #target_include_directories(${PROJ} PUBLIC ${INC_DIRS})
-target_link_libraries(${PROJ} ${LIBS})
+#target_link_libraries(${PROJ} ${LIBS})
 
 enable_testing()
 add_subdirectory(test)
@@ -44,8 +43,6 @@ set_property(TARGET ${PROJ}
 
 install(TARGETS ${PROJ}
         EXPORT "${PROJ}Config"
-        ARCHIVE DESTINATION lib/${PROJ}
-        LIBRARY DESTINATION lib/${PROJ}
         PUBLIC_HEADER DESTINATION include/${PROJ})
 
 export(TARGETS ${PROJ}
