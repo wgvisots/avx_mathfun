@@ -71,8 +71,10 @@ constexpr float cephes_log_p8 = + 3.3333331174E-1F;
 constexpr float cephes_log_q1 = -2.12194440e-4F;
 constexpr float cephes_log_q2 = 0.693359375F;
 
-constexpr float exp_hi = 88.3762626647949F;
-constexpr float exp_lo = -88.3762626647949F;
+// exp() input clamp, the same as avx512_mathfun.h: exp(89) overflows to +inf and exp(-104) rounds
+// to 0, so clamping changes no result.
+constexpr float exp_hi = 89.0F;
+constexpr float exp_lo = -104.0F;
 constexpr float cephes_LOG2EF = 1.44269504088896341F;
 constexpr float cephes_exp_C1 = 0.693359375F;
 constexpr float cephes_exp_C2 = -2.12194440e-4F;
@@ -124,13 +126,14 @@ inline v8sf bits(int i) { return _mm256_castsi256_ps(_mm256_set1_epi32(i)); }
   128-bit halves.
 */
 #ifdef __AVX2__
-inline v8si add_epi32(v8si a, v8si b)    { return _mm256_add_epi32(a, b); }
-inline v8si sub_epi32(v8si a, v8si b)    { return _mm256_sub_epi32(a, b); }
-inline v8si and_si256(v8si a, v8si b)    { return _mm256_and_si256(a, b); }
+inline v8si add_epi32(v8si a, v8si b) { return _mm256_add_epi32(a, b); }
+inline v8si sub_epi32(v8si a, v8si b) { return _mm256_sub_epi32(a, b); }
+inline v8si and_si256(v8si a, v8si b) { return _mm256_and_si256(a, b); }
 inline v8si andnot_si256(v8si a, v8si b) { return _mm256_andnot_si256(a, b); }
-inline v8si cmpeq_epi32(v8si a, v8si b)  { return _mm256_cmpeq_epi32(a, b); }
+inline v8si cmpeq_epi32(v8si a, v8si b) { return _mm256_cmpeq_epi32(a, b); }
 template <int N> inline v8si slli_epi32(v8si a) { return _mm256_slli_epi32(a, N); }
 template <int N> inline v8si srli_epi32(v8si a) { return _mm256_srli_epi32(a, N); }
+template <int N> inline v8si srai_epi32(v8si a) { return _mm256_srai_epi32(a, N); }
 #else
 inline v4si lo128(v8si a) { return _mm256_castsi256_si128(a); }
 inline v4si hi128(v8si a) { return _mm256_extractf128_si256(a, 1); }
@@ -158,23 +161,31 @@ template <int N> inline v8si slli_epi32(v8si a) {
 template <int N> inline v8si srli_epi32(v8si a) {
   return combine(_mm_srli_epi32(lo128(a), N), _mm_srli_epi32(hi128(a), N));
 }
+template <int N> inline v8si srai_epi32(v8si a) {
+  return combine(_mm_srai_epi32(lo128(a), N), _mm_srai_epi32(hi128(a), N));
+}
 #endif /* __AVX2__ */
 
 } // namespace detail
 
 
-/* natural logarithm computed for 8 simultaneous float
-   return NaN for x <= 0
+/* natural logarithm computed for 8 simultaneous floats
+   log(x < 0) = NaN, log(+-0) = -inf, log(+inf) = +inf, log(NaN) = NaN; subnormals are handled
+   accurately.  Same results as log512_ps in avx512_mathfun.h.
 */
 //wgvisots - added inline
 inline v8sf log256_ps(v8sf x) {
   using namespace detail;
   v8si imm0;
-  const v8sf one = set1(1.0F);
+  const v8sf one   = set1(1.0F);
+  const v8sf input = x;
 
-  v8sf invalid_mask = _mm256_cmp_ps(x, _mm256_setzero_ps(), _CMP_LE_OS);
+  /* subnormals: scale by 2^24 into the normal range, and take 24 off the exponent below */
+  const v8sf subnormal = _mm256_and_ps(_mm256_cmp_ps(x, set1(std::numeric_limits<float>::min()), _CMP_LT_OQ),
+                                       _mm256_cmp_ps(x, _mm256_setzero_ps(), _CMP_GT_OQ));
+  x = _mm256_blendv_ps(x, _mm256_mul_ps(x, set1(16777216.0F)), subnormal);
 
-  x = _mm256_max_ps(x, set1(std::numeric_limits<float>::min()));  /* cut off denormalized stuff */
+  x = _mm256_max_ps(x, set1(std::numeric_limits<float>::min()));  /* zero, negatives and NaN are fixed up at the end */
 
   imm0 = srli_epi32<23>(_mm256_castps_si256(x));
 
@@ -186,6 +197,7 @@ inline v8sf log256_ps(v8sf x) {
   v8sf e = _mm256_cvtepi32_ps(imm0);
 
   e = _mm256_add_ps(e, one);
+  e = _mm256_sub_ps(e, _mm256_and_ps(subnormal, set1(24.0F)));
 
   /* part2:
      if( x < SQRTHF ) {
@@ -231,16 +243,25 @@ inline v8sf log256_ps(v8sf x) {
   tmp = _mm256_mul_ps(e, set1(cephes_log_q2));
   x = _mm256_add_ps(x, y);
   x = _mm256_add_ps(x, tmp);
-  x = _mm256_or_ps(x, invalid_mask); // negative arg will be NAN
+
+  /* special values (C99 Annex F) */
+  x = _mm256_blendv_ps(x, set1(-std::numeric_limits<float>::infinity()), _mm256_cmp_ps(input, _mm256_setzero_ps(), _CMP_EQ_OQ));
+  x = _mm256_blendv_ps(x, set1(std::numeric_limits<float>::infinity()), _mm256_cmp_ps(input, set1(std::numeric_limits<float>::infinity()), _CMP_EQ_OQ));
+  x = _mm256_blendv_ps(x, set1(std::numeric_limits<float>::quiet_NaN()), _mm256_cmp_ps(input, _mm256_setzero_ps(), _CMP_NGE_UQ)); /* x < 0 or NaN */
   return x;
 }
 
+/* exp() computed for 8 simultaneous floats
+   exp(+-0) = 1, exp(+inf) = +inf, exp(-inf) = 0, exp(NaN) = NaN; results overflow to +inf and
+   underflow through the subnormals to 0, as in C.  Same results as exp512_ps in avx512_mathfun.h.
+*/
 //wgvisots - added inline
 inline v8sf exp256_ps(v8sf x) {
   using namespace detail;
   v8sf tmp, fx;
   v8si imm0;
-  const v8sf one = set1(1.0F);
+  const v8sf one   = set1(1.0F);
+  const v8sf input = x;
 
   x = _mm256_min_ps(x, set1(exp_hi));
   x = _mm256_max_ps(x, set1(exp_lo));
@@ -278,12 +299,18 @@ inline v8sf exp256_ps(v8sf x) {
   y = _mm256_add_ps(y, x);
   y = _mm256_add_ps(y, one);
 
-  /* build 2^n */
+  /* multiply by 2^n.  n is in [-150, 128], where 2^n is not always a normal float, so apply it in
+     two halves that are: y * 2^n1 is exact, and the multiply by 2^n2 rounds once, overflowing to
+     +inf or rounding to a subnormal (or 0) exactly as a correctly rounded exp would. */
   imm0 = _mm256_cvttps_epi32(fx);
-  imm0 = add_epi32(imm0, set1i(0x7f));
-  imm0 = slli_epi32<23>(imm0);
-  v8sf pow2n = _mm256_castsi256_ps(imm0);
-  y = _mm256_mul_ps(y, pow2n);
+  const v8si n1 = srai_epi32<1>(imm0);
+  const v8si n2 = sub_epi32(imm0, n1);
+  const v8sf pow2n1 = _mm256_castsi256_ps(slli_epi32<23>(add_epi32(n1, set1i(0x7f))));
+  const v8sf pow2n2 = _mm256_castsi256_ps(slli_epi32<23>(add_epi32(n2, set1i(0x7f))));
+  y = _mm256_mul_ps(_mm256_mul_ps(y, pow2n1), pow2n2);
+
+  /* NaN in, NaN out (the clamps above replaced it with a number) */
+  y = _mm256_blendv_ps(y, input, _mm256_cmp_ps(input, input, _CMP_UNORD_Q));
   return y;
 }
 
@@ -519,7 +546,7 @@ inline void sincos256_ps(v8sf x, v8sf *s, v8sf *c) {
  * @param c receives atan2(y[i], x[i]) for each lane i; -pi <= c <= pi
  */
 //wgvisots
-inline void atan2(const v8sf &y, const v8sf &x, v8sf &c){
+inline void atan2(const v8sf &y, const v8sf &x, v8sf &c) {
     alignas(32) float yArray[8];
     alignas(32) float xArray[8];
     alignas(32) float cArray[8];
@@ -537,7 +564,7 @@ inline void atan2(const v8sf &y, const v8sf &x, v8sf &c){
  * @param a
  * @param c receives atan(a[i]) for each lane i
  */
-inline void atan(const v8sf &a, v8sf &c){
+inline void atan(const v8sf &a, v8sf &c) {
     alignas(32) float aArray[8];
     alignas(32) float cArray[8];
     _mm256_store_ps(aArray, a);
@@ -602,7 +629,7 @@ inline v8sf polevl(const v8sf& x, const float* coef, const std::size_t& N) {
  * @param coef N coefficients
  * @param N    degree, must be >= 2
  */
-inline v8sf p1evl(const v8sf& x, const float* coef, const std::size_t& N ){
+inline v8sf p1evl(const v8sf& x, const float* coef, const std::size_t& N ) {
     const float* p = coef;
     std::size_t i = N-1;
 
