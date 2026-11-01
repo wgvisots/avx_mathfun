@@ -116,9 +116,19 @@ constexpr int sign_mask     = static_cast<int>(0x80000000U);
 constexpr int inv_sign_mask = 0x7FFFFFFF;
 constexpr int inv_mant_mask = ~0x7f800000;
 
-inline v8sf set1(float f) { return _mm256_set1_ps(f); }
-inline v8si set1i(int i) { return _mm256_set1_epi32(i); }
-inline v8sf bits(int i) { return _mm256_castsi256_ps(_mm256_set1_epi32(i)); }
+inline v8sf set1(float f) noexcept { return _mm256_set1_ps(f); }
+inline v8si set1i(int i) noexcept { return _mm256_set1_epi32(i); }
+inline v8sf bits(int i) noexcept { return _mm256_castsi256_ps(_mm256_set1_epi32(i)); }
+
+/* a * b + c: one fused instruction where FMA is available, a separate multiply and add otherwise
+   (AVX-only CPUs such as Sandy Bridge have no FMA). */
+inline v8sf fmadd(v8sf a, v8sf b, v8sf c) noexcept {
+#ifdef __FMA__
+  return _mm256_fmadd_ps(a, b, c);
+#else
+  return _mm256_add_ps(_mm256_mul_ps(a, b), c);
+#endif
+}
 
 /*
   32-bit integer operations on 256-bit vectors.  These are single AVX2
@@ -126,42 +136,42 @@ inline v8sf bits(int i) { return _mm256_castsi256_ps(_mm256_set1_epi32(i)); }
   128-bit halves.
 */
 #ifdef __AVX2__
-inline v8si add_epi32(v8si a, v8si b) { return _mm256_add_epi32(a, b); }
-inline v8si sub_epi32(v8si a, v8si b) { return _mm256_sub_epi32(a, b); }
-inline v8si and_si256(v8si a, v8si b) { return _mm256_and_si256(a, b); }
-inline v8si andnot_si256(v8si a, v8si b) { return _mm256_andnot_si256(a, b); }
-inline v8si cmpeq_epi32(v8si a, v8si b) { return _mm256_cmpeq_epi32(a, b); }
-template <int N> inline v8si slli_epi32(v8si a) { return _mm256_slli_epi32(a, N); }
-template <int N> inline v8si srli_epi32(v8si a) { return _mm256_srli_epi32(a, N); }
-template <int N> inline v8si srai_epi32(v8si a) { return _mm256_srai_epi32(a, N); }
+inline v8si add_epi32(v8si a, v8si b) noexcept { return _mm256_add_epi32(a, b); }
+inline v8si sub_epi32(v8si a, v8si b) noexcept { return _mm256_sub_epi32(a, b); }
+inline v8si and_si256(v8si a, v8si b) noexcept { return _mm256_and_si256(a, b); }
+inline v8si andnot_si256(v8si a, v8si b) noexcept { return _mm256_andnot_si256(a, b); }
+inline v8si cmpeq_epi32(v8si a, v8si b) noexcept { return _mm256_cmpeq_epi32(a, b); }
+template <int N> inline v8si slli_epi32(v8si a) noexcept { return _mm256_slli_epi32(a, N); }
+template <int N> inline v8si srli_epi32(v8si a) noexcept { return _mm256_srli_epi32(a, N); }
+template <int N> inline v8si srai_epi32(v8si a) noexcept { return _mm256_srai_epi32(a, N); }
 #else
-inline v4si lo128(v8si a) { return _mm256_castsi256_si128(a); }
-inline v4si hi128(v8si a) { return _mm256_extractf128_si256(a, 1); }
-inline v8si combine(v4si lo, v4si hi) { return _mm256_insertf128_si256(_mm256_castsi128_si256(lo), hi, 1); }
+inline v4si lo128(v8si a) noexcept { return _mm256_castsi256_si128(a); }
+inline v4si hi128(v8si a) noexcept { return _mm256_extractf128_si256(a, 1); }
+inline v8si combine(v4si lo, v4si hi) noexcept { return _mm256_insertf128_si256(_mm256_castsi128_si256(lo), hi, 1); }
 
-inline v8si add_epi32(v8si a, v8si b) {
+inline v8si add_epi32(v8si a, v8si b) noexcept {
   return combine(_mm_add_epi32(lo128(a), lo128(b)), _mm_add_epi32(hi128(a), hi128(b)));
 }
-inline v8si sub_epi32(v8si a, v8si b) {
+inline v8si sub_epi32(v8si a, v8si b) noexcept {
   return combine(_mm_sub_epi32(lo128(a), lo128(b)), _mm_sub_epi32(hi128(a), hi128(b)));
 }
-inline v8si cmpeq_epi32(v8si a, v8si b) {
+inline v8si cmpeq_epi32(v8si a, v8si b) noexcept {
   return combine(_mm_cmpeq_epi32(lo128(a), lo128(b)), _mm_cmpeq_epi32(hi128(a), hi128(b)));
 }
 // bitwise ops can use the AVX float-domain instructions
-inline v8si and_si256(v8si a, v8si b) {
+inline v8si and_si256(v8si a, v8si b) noexcept {
   return _mm256_castps_si256(_mm256_and_ps(_mm256_castsi256_ps(a), _mm256_castsi256_ps(b)));
 }
-inline v8si andnot_si256(v8si a, v8si b) {
+inline v8si andnot_si256(v8si a, v8si b) noexcept {
   return _mm256_castps_si256(_mm256_andnot_ps(_mm256_castsi256_ps(a), _mm256_castsi256_ps(b)));
 }
-template <int N> inline v8si slli_epi32(v8si a) {
+template <int N> inline v8si slli_epi32(v8si a) noexcept {
   return combine(_mm_slli_epi32(lo128(a), N), _mm_slli_epi32(hi128(a), N));
 }
-template <int N> inline v8si srli_epi32(v8si a) {
+template <int N> inline v8si srli_epi32(v8si a) noexcept {
   return combine(_mm_srli_epi32(lo128(a), N), _mm_srli_epi32(hi128(a), N));
 }
-template <int N> inline v8si srai_epi32(v8si a) {
+template <int N> inline v8si srai_epi32(v8si a) noexcept {
   return combine(_mm_srai_epi32(lo128(a), N), _mm_srai_epi32(hi128(a), N));
 }
 #endif /* __AVX2__ */
@@ -174,7 +184,7 @@ template <int N> inline v8si srai_epi32(v8si a) {
    accurately.  Same results as log512_ps in avx512_mathfun.h.
 */
 //wgvisots - added inline
-inline v8sf log256_ps(v8sf x) {
+inline v8sf log256_ps(v8sf x) noexcept {
   using namespace detail;
   v8si imm0;
   const v8sf one   = set1(1.0F);
@@ -256,7 +266,7 @@ inline v8sf log256_ps(v8sf x) {
    underflow through the subnormals to 0, as in C.  Same results as exp512_ps in avx512_mathfun.h.
 */
 //wgvisots - added inline
-inline v8sf exp256_ps(v8sf x) {
+inline v8sf exp256_ps(v8sf x) noexcept {
   using namespace detail;
   v8sf tmp, fx;
   v8si imm0;
@@ -318,7 +328,7 @@ namespace detail {
 
 /* The magic pass: "Extended precision modular arithmetic"
    x = ((x - y * DP1) - y * DP2) - y * DP3; */
-inline v8sf cephes_reduce(v8sf x, v8sf y) {
+inline v8sf cephes_reduce(v8sf x, v8sf y) noexcept {
   v8sf xmm1 = _mm256_mul_ps(y, set1(minus_cephes_DP1));
   v8sf xmm2 = _mm256_mul_ps(y, set1(minus_cephes_DP2));
   v8sf xmm3 = _mm256_mul_ps(y, set1(minus_cephes_DP3));
@@ -329,7 +339,7 @@ inline v8sf cephes_reduce(v8sf x, v8sf y) {
 }
 
 /* first polynom (0 <= x <= Pi/4), z = x*x */
-inline v8sf cephes_cos_poly(v8sf z) {
+inline v8sf cephes_cos_poly(v8sf z) noexcept {
   v8sf y = set1(coscof_p0);
   y = _mm256_mul_ps(y, z);
   y = _mm256_add_ps(y, set1(coscof_p1));
@@ -344,7 +354,7 @@ inline v8sf cephes_cos_poly(v8sf z) {
 }
 
 /* second polynom (Pi/4 <= x <= 0), z = x*x */
-inline v8sf cephes_sin_poly(v8sf x, v8sf z) {
+inline v8sf cephes_sin_poly(v8sf x, v8sf z) noexcept {
   v8sf y2 = set1(sincof_p0);
   y2 = _mm256_mul_ps(y2, z);
   y2 = _mm256_add_ps(y2, set1(sincof_p1));
@@ -371,7 +381,7 @@ inline v8sf cephes_sin_poly(v8sf x, v8sf z) {
 
 */
 //wgvisots - added inline
-inline v8sf sin256_ps(v8sf x) { // any x
+inline v8sf sin256_ps(v8sf x) noexcept { // any x
   using namespace detail;
   v8sf sign_bit, y;
   v8si imm0, imm2;
@@ -426,7 +436,7 @@ inline v8sf sin256_ps(v8sf x) { // any x
 
 /* almost the same as sin_ps */
 //wgvisots - added inline
-inline v8sf cos256_ps(v8sf x) { // any x
+inline v8sf cos256_ps(v8sf x) noexcept { // any x
   using namespace detail;
   v8sf y;
   v8si imm0, imm2;
@@ -474,7 +484,7 @@ inline v8sf cos256_ps(v8sf x) { // any x
 /* since sin256_ps and cos256_ps are almost identical, sincos256_ps could replace both of them..
    it is almost as fast, and gives you a free cosine with your sine */
 //wgvisots - added inline
-inline void sincos256_ps(v8sf x, v8sf *s, v8sf *c) {
+inline void sincos256_ps(v8sf x, v8sf *s, v8sf *c) noexcept {
   using namespace detail;
   v8sf sign_bit_sin, y;
   v8si imm0, imm2, imm4;
@@ -546,7 +556,7 @@ inline void sincos256_ps(v8sf x, v8sf *s, v8sf *c) {
  * @param c receives atan2(y[i], x[i]) for each lane i; -pi <= c <= pi
  */
 //wgvisots
-inline void atan2(const v8sf &y, const v8sf &x, v8sf &c) {
+inline void atan2(const v8sf &y, const v8sf &x, v8sf &c) noexcept {
     alignas(32) float yArray[8];
     alignas(32) float xArray[8];
     alignas(32) float cArray[8];
@@ -564,7 +574,7 @@ inline void atan2(const v8sf &y, const v8sf &x, v8sf &c) {
  * @param a
  * @param c receives atan(a[i]) for each lane i
  */
-inline void atan(const v8sf &a, v8sf &c) {
+inline void atan(const v8sf &a, v8sf &c) noexcept {
     alignas(32) float aArray[8];
     alignas(32) float cArray[8];
     _mm256_store_ps(aArray, a);
@@ -574,7 +584,7 @@ inline void atan(const v8sf &a, v8sf &c) {
     c = _mm256_load_ps(cArray);
 }
 
-inline void printVec(const v8sf& v) {
+inline void printVec(const v8sf& v) noexcept {
     alignas(32) float vArray[8];
     _mm256_store_ps(vArray, v);
     std::cout << "[ ";
@@ -613,13 +623,13 @@ inline constexpr float atan_Q[5] = {
  * @param N    degree, must be >= 1
  * @return
  */
-inline v8sf polevl(const v8sf& x, const float* coef, const std::size_t& N) {
+inline v8sf polevl(const v8sf& x, const float* coef, const std::size_t& N) noexcept {
     const float* p = coef;
     v8sf ans = _mm256_broadcast_ss(p++);
     std::size_t i = N;
     do {
         v8sf pVec = _mm256_broadcast_ss(p++);
-        ans = _mm256_fmadd_ps(ans, x, pVec);
+        ans = detail::fmadd(ans, x, pVec);
     }while (--i);
     return ans;
 }
@@ -629,14 +639,14 @@ inline v8sf polevl(const v8sf& x, const float* coef, const std::size_t& N) {
  * @param coef N coefficients
  * @param N    degree, must be >= 2
  */
-inline v8sf p1evl(const v8sf& x, const float* coef, const std::size_t& N ) {
+inline v8sf p1evl(const v8sf& x, const float* coef, const std::size_t& N ) noexcept {
     const float* p = coef;
     std::size_t i = N-1;
 
     v8sf ans = _mm256_add_ps(x, _mm256_broadcast_ss(p++));
 
     do
-        ans = _mm256_fmadd_ps(ans, x, _mm256_broadcast_ss(p++));
+        ans = detail::fmadd(ans, x, _mm256_broadcast_ss(p++));
     while( --i );
 
     return ans;
@@ -650,7 +660,7 @@ inline v8sf p1evl(const v8sf& x, const float* coef, const std::size_t& N ) {
  * @param ratio y/x
  * @return
  */
-inline v8sf atan(v8sf ratio) {
+inline v8sf atan(v8sf ratio) noexcept {
     using namespace detail;
     //make argument positive and save the sign bit (keeping the sign bit, rather than testing x < 0,
     //means atan(-0.0) == -0.0, which atan2 relies on)
@@ -696,7 +706,7 @@ inline v8sf atan(v8sf ratio) {
                       p1evl(z, atan_Q, 5));
 
     //z = x * z + x
-    z = _mm256_fmadd_ps(ratio, z, ratio);
+    z = detail::fmadd(ratio, z, ratio);
 
     //Cephes: flag == 2 (x > 0.66, not > T3P8) gets 0.5*MOREBITS; flag == 0 gets nothing.
     //(mask2 also covers the flag == 1 lanes, whose ratio is now negative, so use ~mask.)
@@ -723,7 +733,7 @@ inline v8sf atan(v8sf ratio) {
  * @param y
  * @param x
  */
-inline v8sf atan2(v8sf y, v8sf x) {
+inline v8sf atan2(v8sf y, v8sf x) noexcept {
     using namespace detail;
     const v8sf signMask = bits(sign_mask);
     const v8sf inf      = set1(std::numeric_limits<float>::infinity());

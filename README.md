@@ -27,6 +27,10 @@ subnormals, `log(0)`, overflow and underflow in `exp`, signed zeros, infinities 
 Annex F). The AVX/AVX2 and AVX-512 versions return the same special values and are held to the same
 accuracy limits by the tests. See each function's comment for details.
 
+`src/avx_mathfun.h` also builds for AVX-only CPUs (Sandy Bridge, Ivy Bridge): integer operations
+fall back to SSE2 on 128-bit halves, and multiply-adds to a separate multiply and add when FMA is
+unavailable.
+
 ### Testing without AVX-512 hardware
 
 `runUnitTests512` runs natively if the build machine supports AVX-512F. If it
