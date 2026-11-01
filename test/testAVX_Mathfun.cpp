@@ -33,6 +33,7 @@
 #include "gtest/gtest.h"
 
 #include "../src/avx_mathfun.h"
+#include "mathfun_test_helpers.h"
 
 namespace {
 constexpr std::size_t NUM_ITERS{100000000};
@@ -306,4 +307,156 @@ TEST(MathFunTest, TestATan2Speed_v2) {
     }
 
     EXPECT_NE(r, 0.0F);
+}
+
+/*
+  Accuracy and C99 Annex F special values for log, exp, sin, cos and sincos.  These mirror the
+  tests of the AVX-512 versions in testAVX512_Mathfun.cpp, so both headers are held to the same
+  behavior: the same special-value results, and the same accuracy limits.
+*/
+
+namespace {
+
+__m256 log256(__m256 x) { return avx_mathfun::log256_ps(x); }
+__m256 exp256(__m256 x) { return avx_mathfun::exp256_ps(x); }
+__m256 sin256(__m256 x) { return avx_mathfun::sin256_ps(x); }
+__m256 cos256(__m256 x) { return avx_mathfun::cos256_ps(x); }
+
+__m256 sincosSin256(__m256 x) {
+    __m256 s;
+    __m256 c;
+    avx_mathfun::sincos256_ps(x, &s, &c);
+    return s;
+}
+
+__m256 sincosCos256(__m256 x) {
+    __m256 s;
+    __m256 c;
+    avx_mathfun::sincos256_ps(x, &s, &c);
+    return c;
+}
+
+} // namespace
+
+/* ---- log ----------------------------------------------------------------- */
+
+TEST(MathFunTest, LogAccuracyNormalRange) {
+    const std::vector<float> in = bitSweep(std::numeric_limits<float>::min(), std::numeric_limits<float>::max(), 97);
+    const ErrorStats         s  = measure(in, apply256(log256, in), refLog);
+    EXPECT_LE(s.maxUlp, 2) << "worst input " << s.maxUlpAt;
+}
+
+TEST(MathFunTest, LogAccuracyNearOne) {
+    const std::vector<float> in = bitSweep(0.5F, 2.0F, 7);
+    const ErrorStats         s  = measure(in, apply256(log256, in), refLog);
+    EXPECT_LE(s.maxUlp, 2) << "worst input " << s.maxUlpAt;
+}
+
+TEST(MathFunTest, LogAccuracySubnormal) {
+    const std::vector<float> in =
+        bitSweep(std::numeric_limits<float>::denorm_min(), std::numeric_limits<float>::min(), 13);
+    const ErrorStats s = measure(in, apply256(log256, in), refLog);
+    EXPECT_LE(s.maxUlp, 2) << "worst input " << s.maxUlpAt;
+}
+
+TEST(MathFunTest, LogSpecialValues) {
+    const std::vector<float> in{0.0F, -0.0F, 1.0F, -1.0F, kInf, -kInf, kNaN, -kNaN,
+                                2.0F, 0.5F,  std::numeric_limits<float>::max(), -std::numeric_limits<float>::denorm_min()};
+    const std::vector<float> out = apply256(log256, in);
+    EXPECT_TRUE(sameFloat(out[0], -kInf));
+    EXPECT_TRUE(sameFloat(out[1], -kInf));
+    EXPECT_TRUE(sameFloat(out[2], 0.0F));
+    EXPECT_TRUE(std::isnan(out[3]));
+    EXPECT_TRUE(sameFloat(out[4], kInf));
+    EXPECT_TRUE(std::isnan(out[5]));
+    EXPECT_TRUE(std::isnan(out[6]));
+    EXPECT_TRUE(std::isnan(out[7]));
+    EXPECT_LE(ulpDiff(out[8], std::log(2.0F)), 1);
+    EXPECT_LE(ulpDiff(out[9], std::log(0.5F)), 1);
+    EXPECT_LE(ulpDiff(out[10], std::log(std::numeric_limits<float>::max())), 1);
+    EXPECT_TRUE(std::isnan(out[11]));
+}
+
+/* ---- exp ----------------------------------------------------------------- */
+
+TEST(MathFunTest, ExpAccuracyNormalRange) {
+    // exp(x) is a normal float for x in about [-87.33, 88.72]
+    const std::vector<float> in = concat(linspace(-87.3F, 88.7F, 1000003), linspace(-1.0F, 1.0F, 100003));
+    const ErrorStats         s  = measure(in, apply256(exp256, in), refExp);
+    EXPECT_LE(s.maxUlp, 2) << "worst input " << s.maxUlpAt;
+}
+
+TEST(MathFunTest, ExpAccuracySubnormalResults) {
+    const std::vector<float> in = linspace(-103.9F, -87.4F, 100003);
+    const ErrorStats         s  = measure(in, apply256(exp256, in), refExp);
+    EXPECT_LE(s.maxUlp, 1) << "worst input " << s.maxUlpAt;
+}
+
+TEST(MathFunTest, ExpSpecialValues) {
+    const std::vector<float> in{0.0F, -0.0F, kInf, -kInf, kNaN, 89.0F, 1000.0F, -105.0F, -1000.0F, 1.0F, 88.72F};
+    const std::vector<float> out = apply256(exp256, in);
+    EXPECT_TRUE(sameFloat(out[0], 1.0F));
+    EXPECT_TRUE(sameFloat(out[1], 1.0F));
+    EXPECT_TRUE(sameFloat(out[2], kInf));
+    EXPECT_TRUE(sameFloat(out[3], 0.0F));
+    EXPECT_TRUE(std::isnan(out[4]));
+    EXPECT_TRUE(sameFloat(out[5], kInf));
+    EXPECT_TRUE(sameFloat(out[6], kInf));
+    EXPECT_TRUE(sameFloat(out[7], 0.0F));
+    EXPECT_TRUE(sameFloat(out[8], 0.0F));
+    EXPECT_LE(ulpDiff(out[9], std::numbers::e_v<float>), 1);
+    EXPECT_LE(ulpDiff(out[10], static_cast<float>(std::exp(static_cast<double>(88.72F)))), 2);
+}
+
+/* ---- sin / cos / sincos -------------------------------------------------- */
+
+TEST(MathFunTest, SinCosAccuracyPrimaryRange) {
+    const std::vector<float> positive = linspace(0.0F, 2.0F * std::numbers::pi_v<float>, 1000003);
+    const std::vector<float> in       = concat(positive, negated(positive));
+    const ErrorStats         s        = measure(in, apply256(sin256, in), refSin);
+    const ErrorStats         c        = measure(in, apply256(cos256, in), refCos);
+    EXPECT_LE(s.maxAbs, 1.2e-7) << "sin worst input " << s.maxAbsAt;
+    EXPECT_LE(c.maxAbs, 1.2e-7) << "cos worst input " << c.maxAbsAt;
+}
+
+TEST(MathFunTest, SinCosAccuracySmallArguments) {
+    const std::vector<float> positive = bitSweep(1e-30F, std::numbers::pi_v<float> / 4.0F, 101);
+    const std::vector<float> in       = concat(positive, negated(positive));
+    const ErrorStats         s        = measure(in, apply256(sin256, in), refSin);
+    const ErrorStats         c        = measure(in, apply256(cos256, in), refCos);
+    EXPECT_LE(s.maxUlp, 2) << "sin worst input " << s.maxUlpAt;
+    EXPECT_LE(c.maxUlp, 2) << "cos worst input " << c.maxUlpAt;
+}
+
+TEST(MathFunTest, SinCosAccuracyUpTo8192) {
+    const std::vector<float> positive = linspace(0.0F, 8192.0F, 2000003);
+    const std::vector<float> in       = concat(positive, negated(positive));
+    const ErrorStats         s        = measure(in, apply256(sin256, in), refSin);
+    const ErrorStats         c        = measure(in, apply256(cos256, in), refCos);
+    EXPECT_LE(s.maxAbs, 1.2e-7) << "sin worst input " << s.maxAbsAt;
+    EXPECT_LE(c.maxAbs, 1.2e-7) << "cos worst input " << c.maxAbsAt;
+}
+
+TEST(MathFunTest, SinCosSpecialValues) {
+    const std::vector<float> in{0.0F, -0.0F, kNaN, kInf, -kInf};
+    for (const bool useSincos : {false, true}) {
+        SCOPED_TRACE(useSincos ? "sincos256_ps" : "sin256_ps / cos256_ps");
+        const std::vector<float> s = useSincos ? apply256(sincosSin256, in) : apply256(sin256, in);
+        const std::vector<float> c = useSincos ? apply256(sincosCos256, in) : apply256(cos256, in);
+        EXPECT_TRUE(sameFloat(s[0], 0.0F));
+        EXPECT_TRUE(sameFloat(s[1], -0.0F));
+        EXPECT_TRUE(sameFloat(c[0], 1.0F));
+        EXPECT_TRUE(sameFloat(c[1], 1.0F));
+        for (std::size_t i = 2; i < in.size(); ++i) {
+            EXPECT_TRUE(std::isnan(s[i])) << "sin(" << in[i] << ") = " << s[i];
+            EXPECT_TRUE(std::isnan(c[i])) << "cos(" << in[i] << ") = " << c[i];
+        }
+    }
+}
+
+TEST(MathFunTest, SinCosMatchesSinAndCos) {
+    const std::vector<float> positive = linspace(0.0F, 8192.0F, 500009);
+    const std::vector<float> in       = concat(positive, negated(positive));
+    EXPECT_EQ(maxUlpBetween(apply256(sincosSin256, in), apply256(sin256, in)), 0);
+    EXPECT_EQ(maxUlpBetween(apply256(sincosCos256, in), apply256(cos256, in)), 0);
 }

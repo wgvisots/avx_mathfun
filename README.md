@@ -22,9 +22,14 @@ Only AVX-512F is required, so it runs on any AVX-512 or AVX10 CPU (Skylake-SP an
 later Xeons, Ice Lake, Sapphire Rapids, AMD Zen 4/5, ...). Build with `-mavx512f`,
 `-march=x86-64-v4`, or `-march=native` on a capable machine.
 
-The algorithms are the same Cephes polynomials, but edge cases (subnormals,
-`log(0)`, overflow and underflow in `exp`, signed zeros, infinities and NaN in
-`atan`/`atan2`) follow the C library. See the header comment for details.
+The algorithms are the same Cephes polynomials. In both headers, edge cases follow the C library:
+subnormals, `log(0)`, overflow and underflow in `exp`, signed zeros, infinities and NaN (C99
+Annex F). The AVX/AVX2 and AVX-512 versions return the same special values and are held to the same
+accuracy limits by the tests. See each function's comment for details.
+
+`src/avx_mathfun.h` also builds for AVX-only CPUs (Sandy Bridge, Ivy Bridge): integer operations
+fall back to SSE2 on 128-bit halves, and multiply-adds to a separate multiply and add when FMA is
+unavailable.
 
 ### Testing without AVX-512 hardware
 

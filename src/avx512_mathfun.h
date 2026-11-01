@@ -90,20 +90,20 @@ namespace detail {
 
 // Bitwise float ops.  _mm512_and_ps & friends need AVX-512DQ; going through
 // the integer domain needs only AVX-512F and compiles to the same thing.
-inline v16sf and_ps(v16sf a, v16sf b) {
+inline v16sf and_ps(v16sf a, v16sf b) noexcept {
     return _mm512_castsi512_ps(_mm512_and_si512(_mm512_castps_si512(a), _mm512_castps_si512(b)));
 }
-inline v16sf or_ps(v16sf a, v16sf b) {
+inline v16sf or_ps(v16sf a, v16sf b) noexcept {
     return _mm512_castsi512_ps(_mm512_or_si512(_mm512_castps_si512(a), _mm512_castps_si512(b)));
 }
-inline v16sf xor_ps(v16sf a, v16sf b) {
+inline v16sf xor_ps(v16sf a, v16sf b) noexcept {
     return _mm512_castsi512_ps(_mm512_xor_si512(_mm512_castps_si512(a), _mm512_castps_si512(b)));
 }
-inline v16sf sign_bits(v16sf a) {
+inline v16sf sign_bits(v16sf a) noexcept {
     return and_ps(a, _mm512_castsi512_ps(_mm512_set1_epi32(static_cast<int>(0x80000000u))));
 }
 // lanes whose sign bit is set (including -0.0 and negative NaNs)
-inline v16mask sign_set_mask(v16sf a) {
+inline v16mask sign_set_mask(v16sf a) noexcept {
     return _mm512_test_epi32_mask(_mm512_castps_si512(a), _mm512_set1_epi32(static_cast<int>(0x80000000u)));
 }
 
@@ -166,7 +166,7 @@ constexpr float atan_Q2 = 4.328810604912902668951E2F;
 constexpr float atan_Q3 = 4.853903996359136964868E2F;
 constexpr float atan_Q4 = 1.945506571482613964425E2F;
 
-inline v16sf set1(float f) { return _mm512_set1_ps(f); }
+inline v16sf set1(float f) noexcept { return _mm512_set1_ps(f); }
 
 constexpr float INF  = std::numeric_limits<float>::infinity();
 constexpr float QNAN = std::numeric_limits<float>::quiet_NaN();
@@ -177,7 +177,7 @@ constexpr float QNAN = std::numeric_limits<float>::quiet_NaN();
 /* natural logarithm computed for 16 simultaneous floats
    log(x < 0) = NaN, log(+-0) = -inf, log(+inf) = +inf, log(NaN) = NaN
 */
-inline v16sf log512_ps(v16sf x) {
+inline v16sf log512_ps(v16sf x) noexcept {
     using namespace detail;
     const v16sf one  = set1(1.0F);
     const v16sf zero = _mm512_setzero_ps();
@@ -228,7 +228,7 @@ inline v16sf log512_ps(v16sf x) {
    exp(+inf) = +inf, exp(-inf) = 0, exp(NaN) = NaN; overflow -> +inf,
    underflow -> subnormal / 0.
 */
-inline v16sf exp512_ps(v16sf x) {
+inline v16sf exp512_ps(v16sf x) noexcept {
     using namespace detail;
     const v16sf one = set1(1.0F);
 
@@ -263,7 +263,7 @@ namespace detail {
 
 /* The two Cephes polynomials shared by sin, cos and sincos.
    x is the reduced argument in [-Pi/4, Pi/4], z = x*x. */
-inline v16sf cos_poly(v16sf z) {
+inline v16sf cos_poly(v16sf z) noexcept {
     v16sf y = set1(coscof_p0);
     y = _mm512_fmadd_ps(y, z, set1(coscof_p1));
     y = _mm512_fmadd_ps(y, z, set1(coscof_p2));
@@ -272,7 +272,7 @@ inline v16sf cos_poly(v16sf z) {
     y = _mm512_fnmadd_ps(z, set1(0.5F), y);
     return _mm512_add_ps(y, set1(1.0F));
 }
-inline v16sf sin_poly(v16sf x, v16sf z) {
+inline v16sf sin_poly(v16sf x, v16sf z) noexcept {
     v16sf y = set1(sincof_p0);
     y = _mm512_fmadd_ps(y, z, set1(sincof_p1));
     y = _mm512_fmadd_ps(y, z, set1(sincof_p2));
@@ -282,7 +282,7 @@ inline v16sf sin_poly(v16sf x, v16sf z) {
 
 /* Cephes range reduction.  x must be non-negative.
    Returns the reduced argument; j receives the (even) octant index. */
-inline v16sf reduce(v16sf x, v16si& j) {
+inline v16sf reduce(v16sf x, v16si& j) noexcept {
     /* j = (int)(x * 4/Pi); j = (j+1) & ~1 */
     j = _mm512_cvttps_epi32(_mm512_mul_ps(x, set1(cephes_FOPI)));
     j = _mm512_add_epi32(j, _mm512_set1_epi32(1));
@@ -302,7 +302,7 @@ inline v16sf reduce(v16sf x, v16si& j) {
 /* evaluation of 16 sines at once using AVX-512 intrinsics.
    Precision is excellent as long as |x| < 8192 (see avx_mathfun.h).
 */
-inline v16sf sin512_ps(v16sf x) {
+inline v16sf sin512_ps(v16sf x) noexcept {
     using namespace detail;
     v16sf sign_bit = sign_bits(x);
     x = _mm512_abs_ps(x);
@@ -322,7 +322,7 @@ inline v16sf sin512_ps(v16sf x) {
 }
 
 /* almost the same as sin512_ps */
-inline v16sf cos512_ps(v16sf x) {
+inline v16sf cos512_ps(v16sf x) noexcept {
     using namespace detail;
     x = _mm512_abs_ps(x);
 
@@ -339,7 +339,7 @@ inline v16sf cos512_ps(v16sf x) {
 }
 
 /* sine and cosine together, for roughly the price of one of them */
-inline void sincos512_ps(v16sf x, v16sf* s, v16sf* c) {
+inline void sincos512_ps(v16sf x, v16sf* s, v16sf* c) noexcept {
     using namespace detail;
     v16sf sign_bit_sin = sign_bits(x);
     x = _mm512_abs_ps(x);
@@ -372,7 +372,7 @@ inline void sincos512_ps(v16sf x, v16sf* s, v16sf* c) {
  *
  * atan(+-0) = +-0, atan(+-inf) = +-Pi/2, atan(NaN) = NaN
  */
-inline v16sf atan(v16sf x) {
+inline v16sf atan(v16sf x) noexcept {
     using namespace detail;
     const v16sf one = set1(1.0F);
 
@@ -436,7 +436,7 @@ inline v16sf atan(v16sf x) {
  * @param y
  * @param x
  */
-inline v16sf atan2(v16sf y, v16sf x) {
+inline v16sf atan2(v16sf y, v16sf x) noexcept {
     using namespace detail;
     const v16sf ysign = sign_bits(y);
     const v16sf xsign = sign_bits(x);
@@ -463,7 +463,7 @@ inline v16sf atan2(v16sf y, v16sf x) {
     return z;
 }
 
-inline void printVec(const v16sf& v) {
+inline void printVec(const v16sf& v) noexcept {
     alignas(64) float vArray[16];
     _mm512_store_ps(vArray, v);
     std::cout << "[ ";
