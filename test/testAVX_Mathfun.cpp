@@ -20,59 +20,65 @@
   (this is the zlib license)
 */
 
-#include <iostream>
-#include <cmath>
 #include <chrono>
+#include <cmath>
+#include <cstddef>
+#include <cstdint>
+#include <iostream>
 #include <limits>
+#include <numbers>
+#include <random>
+#include <vector>
 
 #include "gtest/gtest.h"
 
 #include "../src/avx_mathfun.h"
 
 namespace {
-std::size_t NUM_ITERS{100000000};
-const std::size_t PRIME{2251};
-constexpr float scale = (1.0F / static_cast<float>(std::numeric_limits<std::int32_t>::max() - 1)) * (2.0F*static_cast<float>(M_PI));
-std::vector<__m256> data;
+constexpr std::size_t NUM_ITERS{100000000};
+constexpr std::size_t PRIME{2251};
 
-__m256 makeData() {
-    __m256 result;
-    float* rr = reinterpret_cast<float*>(&result);
-    //Yes, I'm calling 'random' and not 'rand' or c++11+ RNG.  My BSD-isms coming out...
-    rr[0] = static_cast<float>(random()) * scale;
-    rr[1] = static_cast<float>(random()) * scale;
-    rr[2] = static_cast<float>(random()) * scale;
-    rr[3] = static_cast<float>(random()) * scale;
-    rr[4] = static_cast<float>(random()) * scale;
-    rr[5] = static_cast<float>(random()) * scale;
-    rr[6] = static_cast<float>(random()) * scale;
-    rr[7] = static_cast<float>(random()) * scale;
-    return result;
-}
-
-void makeAllData() {
-    if (data.empty()) {
-        srandom((unsigned int)std::chrono::system_clock::now().time_since_epoch().count());
-        data.reserve(PRIME);
-        for (std::size_t i = 0; i < PRIME; i++) {
-            data.push_back(makeData());
+// PRIME vectors of 8 random angles in [0, 2*pi), stored as plain floats and
+// loaded with _mm256_loadu_ps.  (A std::vector<__m256> drops __m256's
+// may_alias attribute, and reading its lanes through a float* is not valid C++.)
+const std::vector<float>& benchData() {
+    static const std::vector<float> data = [] {
+        std::mt19937 rng(20240101U);  // fixed seed: reproducible runs
+        std::uniform_real_distribution<float> dist(0.0F, 2.0F * std::numbers::pi_v<float>);
+        std::vector<float> d(PRIME * 8);
+        for (float& f : d) {
+            f = dist(rng);
         }
+        return d;
+    }();
+    return data;
+}
+
+__m256 benchVec(std::size_t i) {
+    return _mm256_loadu_ps(&benchData()[(i % PRIME) * 8]);
+}
+
+float sumLanes(__m256 v) {
+    alignas(32) float f[8];
+    _mm256_store_ps(f, v);
+    float r = 0.0F;
+    for (float x : f) {
+        r += x;
     }
+    return r;
+}
 }
 
-
-// std::size_t NUM_ITERS{1000000};
-}
 TEST(MathFunTest, TestATan) {
-    float v[8] __attribute__ ((aligned (32)));
+    alignas(32) float v[8];
     for (std::size_t i = 0; i < 8; ++i) {
-        v[i]= M_PI / (float) (i+1);
+        v[i] = std::numbers::pi_v<float> / static_cast<float>(i + 1);
     }
 
     __m256 vv = _mm256_load_ps(v);
     __m256 result = avx_mathfun::atan(vv);
 
-    float res[8] __attribute__ ((aligned (32)));
+    alignas(32) float res[8];
     _mm256_store_ps(res, result);
 
     for (std::size_t i = 0; i < 8; ++i) {
@@ -82,7 +88,7 @@ TEST(MathFunTest, TestATan) {
 }
 
 TEST(MathFunTest, TestATan_no2) {
-    float x[8];
+    alignas(32) float x[8];
     for (std::int32_t i = 0; i < 8; ++i) {
         float xx = (float)(i-4);
         float yy = (float)((7-i)-4);
@@ -93,7 +99,7 @@ TEST(MathFunTest, TestATan_no2) {
 
     __m256 zz = avx_mathfun::atan(xx);
 
-    float result[8];
+    alignas(32) float result[8];
     _mm256_store_ps(result, zz);
     for (std::size_t i = 0; i < 8; ++i) {
         float truth = std::atan(x[i]);
@@ -102,9 +108,9 @@ TEST(MathFunTest, TestATan_no2) {
 }
 
 TEST(MathFunTest, TestATan2) {
-    float x[8];
-    float y[8];
-    float truth[8];
+    alignas(32) float x[8];
+    alignas(32) float y[8];
+    alignas(32) float truth[8];
     for (std::int32_t i = 0; i < 8; ++i) {
         const float xx = static_cast<float>(i - 4);
         const float yy = static_cast<float>((7 - i) - 4);
@@ -118,17 +124,70 @@ TEST(MathFunTest, TestATan2) {
 
     const __m256 zz = avx_mathfun::atan2(yy, xx);
 
-    float result[8];
+    alignas(32) float result[8];
     _mm256_store_ps(result, zz);
     for (std::size_t i = 0; i < 8; ++i) {
         EXPECT_NEAR(result[i], truth[i], 1e-5);
     }
 }
 
+TEST(MathFunTest, TestATan2_no3) {
+    // Dense grid over [-12, 12) x [-12, 12) with step 0.001 (~576M points).
+    // Points are streamed through an 8-float buffer instead of being stored, so
+    // memory use is constant, and errors are summarised in one assertion so a
+    // regression doesn't print millions of lines.
+    float ys[8];
+    float xs[8];
+    float rf[8];
+    std::size_t n = 0;
+    std::size_t count = 0;
+    std::size_t failures = 0;
+    float worstErr = 0.0F;
+    float worstY = 0.0F;
+    float worstX = 0.0F;
+
+    const auto flush = [&]() {
+        _mm256_storeu_ps(rf, avx_mathfun::atan2(_mm256_loadu_ps(ys), _mm256_loadu_ps(xs)));
+        for (std::size_t j = 0; j < n; ++j) {
+            const float err = std::fabs(rf[j] - std::atan2(ys[j], xs[j]));
+            if (!(err <= 1e-5F)) {  // also catches NaN
+                ++failures;
+            }
+            if (!(err <= worstErr)) {
+                worstErr = err;
+                worstY = ys[j];
+                worstX = xs[j];
+            }
+        }
+        count += n;
+        n = 0;
+    };
+
+    for (float f1 = -12.0F; f1 < 12.0F; f1 += 0.001F) {
+        for (float f2 = -12.0F; f2 < 12.0F; f2 += 0.001F) {
+            ys[n] = f1;
+            xs[n] = f2;
+            if (++n == 8) {
+                flush();
+            }
+        }
+    }
+    if (n != 0) {
+        for (std::size_t j = n; j < 8; ++j) {  // pad the last partial vector
+            ys[j] = 1.0F;
+            xs[j] = 1.0F;
+        }
+        flush();
+    }
+
+    EXPECT_EQ(failures, 0U) << failures << " of " << count << " points off by more than 1e-5; worst error "
+                            << worstErr << " at atan2(" << worstY << ", " << worstX << ")";
+}
+
 TEST(MathFunTest, TestATan2_no2) {
-    float x[8];
-    float y[8];
-    float truth[8];
+    alignas(32) float x[8];
+    alignas(32) float y[8];
+    alignas(32) float truth[8];
 
     for (float fx = -1.0; fx <= 1.0; fx += 0.01) {
         for (std::size_t i = 0; i < 8; ++i) {
@@ -149,7 +208,7 @@ TEST(MathFunTest, TestATan2_no2) {
 
             const __m256 zz = avx_mathfun::atan2(yy, xx);
 
-            float result[8];
+            alignas(32) float result[8];
             _mm256_store_ps(result, zz);
             for (std::size_t i = 0; i < 8; ++i) {
                 EXPECT_NEAR(result[i], truth[i], 1e-5);
@@ -159,91 +218,91 @@ TEST(MathFunTest, TestATan2_no2) {
     }
 }
 
+// Regression test: atan2 used to return the wrong quadrant when x < 0 and y < 0,
+// and NaN for atan2(0, 0).  Covers all four quadrants, the axes, signed zeros,
+// infinities and NaN, compared against std::atan2.
+TEST(MathFunTest, TestATan2QuadrantsAndSpecialValues) {
+    const float inf = std::numeric_limits<float>::infinity();
+    const float nan = std::numeric_limits<float>::quiet_NaN();
+    const std::vector<float> vals{0.0F, -0.0F, 1.0F, -1.0F, 0.3F, -0.3F, 2.5F, -2.5F,
+                                  1e-40F, -1e-40F, 1e30F, -1e30F, inf, -inf, nan};
+    std::vector<float> ys;
+    std::vector<float> xs;
+    for (float yv : vals) {
+        for (float xv : vals) {
+            ys.push_back(yv);
+            xs.push_back(xv);
+        }
+    }
+    while (ys.size() % 8 != 0) {
+        ys.push_back(1.0F);
+        xs.push_back(1.0F);
+    }
+
+    alignas(32) float res[8];
+    for (std::size_t i = 0; i < ys.size(); i += 8) {
+        _mm256_store_ps(res, avx_mathfun::atan2(_mm256_loadu_ps(&ys[i]), _mm256_loadu_ps(&xs[i])));
+        for (std::size_t j = 0; j < 8; ++j) {
+            const float y = ys[i + j];
+            const float x = xs[i + j];
+            const float truth = std::atan2(y, x);
+            if (std::isnan(truth)) {
+                EXPECT_TRUE(std::isnan(res[j])) << "atan2(" << y << ", " << x << ") = " << res[j];
+            } else {
+                EXPECT_NEAR(res[j], truth, 1e-6) << "atan2(" << y << ", " << x << ")";
+                EXPECT_EQ(std::signbit(res[j]), std::signbit(truth)) << "sign of atan2(" << y << ", " << x << ")";
+            }
+        }
+    }
+}
+
 TEST(MathFunTest, TestATanVecSpeed) {
-    makeAllData();
-    const __m256* d = data.data();
     float r{0.0};
     for (std::size_t i = 0; i < NUM_ITERS; i++) {
-        __m256 result = avx_mathfun::atan(d[i%PRIME]);
-        float* rr = reinterpret_cast<float*>(&result);
-        r += rr[0];
-        r += rr[1];
-        r += rr[2];
-        r += rr[3];
-        r += rr[4];
-        r += rr[5];
-        r += rr[6];
-        r += rr[7];
+        r += sumLanes(avx_mathfun::atan(benchVec(i)));
     }
 
     EXPECT_GT(r, 1.0F);
-    // EXPECT_GE(avx_mathfun::counter, NUM_ITERS);
 }
 
 TEST(MathFunTest, TestATanSpeed) {
     __m256 c;
-    const __m256* d = data.data();
     float r{0.0};
     for (std::size_t i = 0; i < NUM_ITERS; i++) {
-        avx_mathfun::atan(d[i%PRIME], c);
-        float* rr = reinterpret_cast<float*>(&c);
-        r += rr[0];
-        r += rr[1];
-        r += rr[2];
-        r += rr[3];
-        r += rr[4];
-        r += rr[5];
-        r += rr[6];
-        r += rr[7];
+        avx_mathfun::atan(benchVec(i), c);
+        r += sumLanes(c);
     }
 
     EXPECT_GT(r, 1.0F);
 }
 
+// The atan2 speed tests take their inputs from benchData(), which changes every
+// iteration, so the compiler can't evaluate the call once and hoist it out of the
+// loop.  Shifting the angles by -pi gives values in [-pi, pi), so all four
+// quadrants are exercised; y and x come from different offsets in the table.
+namespace {
+__m256 benchY(std::size_t i) {
+    return _mm256_sub_ps(benchVec(i), _mm256_set1_ps(std::numbers::pi_v<float>));
+}
+__m256 benchX(std::size_t i) {
+    return _mm256_sub_ps(benchVec(i + 1000), _mm256_set1_ps(std::numbers::pi_v<float>));
+}
+}
+
 TEST(MathFunTest, TestATan2VecSpeed) {
-    float x[8] __attribute__ ((aligned (32)));
-    float y[8] __attribute__ ((aligned (32)));
-    for (std::int32_t i = 0; i < 8; ++i) {
-        float xx = (float)(i-4);
-        float yy = (float)((7-i)-4);
-        x[i] = xx;
-        y[i] = yy;
-    }
-
-    __m256 xx = _mm256_load_ps(x);
-    __m256 yy = _mm256_load_ps(y);
-
     float r{0.0};
-
     for (std::size_t i = 0; i < NUM_ITERS; i++) {
-        const __m256 result = avx_mathfun::atan2(xx, yy);
-        const float* rr = reinterpret_cast<const float*>(&result);
-        for (std::size_t j = 0; j < 8; ++j) {
-            r += rr[j];
-        }
+        r += sumLanes(avx_mathfun::atan2(benchY(i), benchX(i)));
     }
     EXPECT_NE(r, 0.0F);
 }
-TEST(MathFunTest, TestATan2Speed_v2) {
-    float x[8] __attribute__ ((aligned (32)));
-    float y[8] __attribute__ ((aligned (32)));
-    for (std::int32_t i = 0; i < 8; ++i) {
-        float xx = (float)(i-4);
-        float yy = (float)((7-i)-4);
-        x[i] = xx;
-        y[i] = yy;
-    }
 
-    __m256 xx __attribute__ ((aligned (32))) = _mm256_load_ps(x);
-    __m256 yy __attribute__ ((aligned (32))) = _mm256_load_ps(y);
-    __m256 zz __attribute__ ((aligned (32)));
+TEST(MathFunTest, TestATan2Speed_v2) {
+    __m256 zz;
     float r{0.0};
     for (std::size_t i = 0; i < NUM_ITERS; i++) {
-        avx_mathfun::atan2(xx, yy, zz);
-        const float* rr = reinterpret_cast<float*>(&zz);
-        for (std::size_t j = 0; j < 8; ++j) {
-            r += rr[j];
-        }
+        avx_mathfun::atan2(benchY(i), benchX(i), zz);
+        r += sumLanes(zz);
     }
 
     EXPECT_NE(r, 0.0F);

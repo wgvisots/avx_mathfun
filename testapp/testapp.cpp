@@ -20,142 +20,98 @@ Copyright (C) 2024 - 2026 W. Greg Visotski
   (this is the zlib license)
 */
 
-#include <iostream>
-#include <cstdint>
-#include <limits>
 #include <chrono>
+#include <cmath>
+#include <cstddef>
+#include <iostream>
+#include <numbers>
+#include <random>
+#include <vector>
 
 #include "../src/avx_mathfun.h"
 
 namespace {
-    std::size_t NUM_ITERS{1000000};
-    const std::size_t PRIME{2251};
-    constexpr float scale = (1.0F / static_cast<float>(std::numeric_limits<std::int32_t>::max() - 1)) * (2.0F*static_cast<float>(M_PI));
+    constexpr std::size_t NUM_ITERS{1000000};
+    constexpr std::size_t PRIME{2251};
+
+    float sumLanes(__m256 v) {
+        alignas(32) float f[8];
+        _mm256_store_ps(f, v);
+        float r = 0.0F;
+        for (float x : f) {
+            r += x;
+        }
+        return r;
+    }
 }
 
-/**
- * This fills the return with random numbers from 0 -> 2PI.
- * The point of doing all this weird work is to confuse compiler optimizer as much as possible.
- * @return
- */
-__m256 makeData() {
-    __m256 result;
-    float* rr = reinterpret_cast<float*>(&result);
-    //Yes, I'm calling 'random' and not 'rand' or c++11+ RNG.  My BSD-isms coming out...
-    rr[0] = static_cast<float>(random()) * scale;
-    rr[1] = static_cast<float>(random()) * scale;
-    rr[2] = static_cast<float>(random()) * scale;
-    rr[3] = static_cast<float>(random()) * scale;
-    rr[4] = static_cast<float>(random()) * scale;
-    rr[5] = static_cast<float>(random()) * scale;
-    rr[6] = static_cast<float>(random()) * scale;
-    rr[7] = static_cast<float>(random()) * scale;
-    return result;
+// Vectors are stored as plain floats (8 per vector) and loaded with _mm256_loadu_ps.
+std::vector<float> makeData(std::size_t numVecs) {
+    std::mt19937 rng(static_cast<std::mt19937::result_type>(
+        std::chrono::system_clock::now().time_since_epoch().count()));
+    std::uniform_real_distribution<float> dist(0.0F, 2.0F * std::numbers::pi_v<float>);
+    std::vector<float> data(numVecs * 8);
+    for (float& f : data) {
+        f = dist(rng);
+    }
+    // first vector: fixed, easy to eyeball values
+    const float fixed[8] = {0.0F, 0.1F, 0.2F, 0.3F, 0.4F, 0.5F, 0.8F, 0.9F};
+    for (std::size_t i = 0; i < 8; ++i) {
+        data[i] = fixed[i];
+    }
+    return data;
 }
-__m256 makeData2() {
-    __m256 result;
-    float* rr = reinterpret_cast<float*>(&result);
-    //Yes, I'm calling 'random' and not 'rand' or c++11+ RNG.  My BSD-isms coming out...
-    rr[0] = 0.0f;
-    rr[1] = 0.1f;
-    rr[2] = 0.2f;
-    rr[3] = 0.3f;
-    rr[4] = 0.4f;
-    rr[5] = 0.5f;
-    rr[6] = 0.8f;
-    rr[7] = 0.9f;
-    return result;
-}
-float testVec(const __m256* data, const std::size_t size) {
+
+float testVec(const std::vector<float>& data) {
+    const std::size_t size = data.size() / 8;
     float r{0.0};
     for (std::size_t i = 0; i < NUM_ITERS; i++) {
-        __m256 result = avx_mathfun::atan(data[i%size]);
-        float* rr = reinterpret_cast<float*>(&result);
-        r += rr[0];
-        r += rr[1];
-        r += rr[2];
-        r += rr[3];
-        r += rr[4];
-        r += rr[5];
-        r += rr[6];
-        r += rr[7];
+        r += sumLanes(avx_mathfun::atan(_mm256_loadu_ps(&data[(i % size) * 8])));
     }
-
     return r;
 }
 
-float testNonVec(const __m256* data, const std::size_t size) {
+float testNonVec(const std::vector<float>& data) {
+    const std::size_t size = data.size() / 8;
     __m256 c;
     float r{0.0};
     for (std::size_t i = 0; i < NUM_ITERS; i++) {
-        avx_mathfun::atan(data[i%size], c);
-        float* rr = reinterpret_cast<float*>(&c);
-        r += rr[0];
-        r += rr[1];
-        r += rr[2];
-        r += rr[3];
-        r += rr[4];
-        r += rr[5];
-        r += rr[6];
-        r += rr[7];
+        avx_mathfun::atan(_mm256_loadu_ps(&data[(i % size) * 8]), c);
+        r += sumLanes(c);
     }
-
     return r;
 }
 
-
 void compare(const __m256& data) {
-    __m256 result = avx_mathfun::atan(data);
-
-    const float* d = (const float*)&data;
-    const float* dd = (float*)&result;
-
-    std::vector<float> atans;
-    std::vector<float> stdatans;
-    for (std::size_t i = 0; i < 8; i++) {
-        atans.push_back((float)std::atan(d[i]));
-        stdatans.push_back(std::atan(d[i]));
-    }
-
+    alignas(32) float d[8];
+    alignas(32) float dd[8];
+    _mm256_store_ps(d, data);
+    _mm256_store_ps(dd, avx_mathfun::atan(data));
 
     std::cout << "################################" << std::endl;
     for (std::size_t i = 0; i < 8; i++) {
-        std::cout << d[i] << ",\t " << dd[i] << ",\t " << atans[i] << ",\t " << stdatans[i] << std::endl;
+        std::cout << d[i] << ",\t " << dd[i] << ",\t " << std::atan(d[i]) << std::endl;
     }
     std::cout << "################################" << std::endl;
 }
 
-/**
- * The whole point of this application is to make something that you can run in valgrind and get good profiling information.
- * Some profiling information is lost (or at least harder to parse out) when running inside gtest.
- *
- * The application doesn't do anything but spin some cycles.
- *
- * @return 0
- */
 int main() {
-    srandom(static_cast<unsigned int>(std::chrono::system_clock::now().time_since_epoch().count()));
-    std::vector<__m256> vec;
-    vec.reserve(PRIME);
-    vec.push_back(makeData2());
-    for (std::size_t i = 1; i < PRIME; i++) {
-        vec.push_back(makeData());
-    }
+    const std::vector<float> vec = makeData(PRIME);
 
-    avx_mathfun::printVec(vec[0]);
+    avx_mathfun::printVec(_mm256_loadu_ps(vec.data()));
     std::chrono::system_clock::time_point start = std::chrono::system_clock::now();
-    std::cout << testVec(vec.data(), vec.size()) << std::endl;
+    std::cout << testVec(vec) << std::endl;
     std::chrono::system_clock::time_point mid = std::chrono::system_clock::now();
-    std::cout << testNonVec(vec.data(), vec.size()) << std::endl;
+    std::cout << testNonVec(vec) << std::endl;
     std::chrono::system_clock::time_point stop = std::chrono::system_clock::now();
 
     std::chrono::system_clock::duration nonVecTime = stop - mid;
     std::chrono::system_clock::duration vecTime    = mid - start;
 
-    std::cout << "Non vec time: "    << std::chrono::duration_cast<std::chrono::milliseconds>(nonVecTime) << " milliseconds" <<  std::endl;
-    std::cout << "Vectorized time: " << std::chrono::duration_cast<std::chrono::milliseconds>(vecTime)    << " milliseconds" <<  std::endl;
+    std::cout << "Non vec time: "    << std::chrono::duration_cast<std::chrono::milliseconds>(nonVecTime).count() << " milliseconds" <<  std::endl;
+    std::cout << "Vectorized time: " << std::chrono::duration_cast<std::chrono::milliseconds>(vecTime).count()    << " milliseconds" <<  std::endl;
 
-    // compare(vec.data(), vec.size());
+    // compare(_mm256_loadu_ps(vec.data()));
 
     return 0;
 }

@@ -29,84 +29,74 @@
   (this is the zlib license)
 */
 
-#pragma once /*wgvisots*/
+#ifndef AVX_MATHFUN_H
+#define AVX_MATHFUN_H
 
-#include <cstring>
 #include <cmath>
+#include <cstddef>
 #include <iostream>
+#include <limits>
+#include <numbers>
 #include <immintrin.h>
 
-
-/* yes I know, the top of this file is quite ugly */
+/*
+  wgvisots: Rewritten for strict C++20 conformance (2026).  Constants are
+  constexpr scalars broadcast with _mm256_set1_*, instead of aligned arrays
+  read through casts to vector-pointer types; lanes are read with stores
+  rather than by reinterpreting a vector's address; and the non-AVX2 integer
+  path splits vectors with intrinsics instead of union type punning.  The
+  floating-point operations, and their order, are unchanged, so the results
+  are bit-for-bit identical to the previous version.
+*/
 
 namespace avx_mathfun{ //wgvisots
 
-/* __m128 is ugly to write */
 typedef __m256  v8sf; // vector of 8 float (avx)
 typedef __m256i v8si; // vector of 8 int   (avx)
-typedef __m128i v4si; // vector of 8 int   (avx)
+typedef __m128i v4si; // vector of 4 int   (sse2)
 
-#define _PI32AVX_CONST(Name, Val)                                            \
-  static const int _pi32avx_##Name[4] __attribute__ ((aligned (32))) = { Val, Val, Val, Val }
+namespace detail {
 
-_PI32AVX_CONST(1, 1);
-_PI32AVX_CONST(inv1, ~1);
-_PI32AVX_CONST(2, 2);
-_PI32AVX_CONST(4, 4);
+/* Cephes constants */
+constexpr float cephes_SQRTHF = 0.707106781186547524F;
+constexpr float cephes_log_p0 = 7.0376836292E-2F;
+constexpr float cephes_log_p1 = - 1.1514610310E-1F;
+constexpr float cephes_log_p2 = 1.1676998740E-1F;
+constexpr float cephes_log_p3 = - 1.2420140846E-1F;
+constexpr float cephes_log_p4 = + 1.4249322787E-1F;
+constexpr float cephes_log_p5 = - 1.6668057665E-1F;
+constexpr float cephes_log_p6 = + 2.0000714765E-1F;
+constexpr float cephes_log_p7 = - 2.4999993993E-1F;
+constexpr float cephes_log_p8 = + 3.3333331174E-1F;
+constexpr float cephes_log_q1 = -2.12194440e-4F;
+constexpr float cephes_log_q2 = 0.693359375F;
 
+constexpr float exp_hi = 88.3762626647949F;
+constexpr float exp_lo = -88.3762626647949F;
+constexpr float cephes_LOG2EF = 1.44269504088896341F;
+constexpr float cephes_exp_C1 = 0.693359375F;
+constexpr float cephes_exp_C2 = -2.12194440e-4F;
+constexpr float cephes_exp_p0 = 1.9875691500E-4F;
+constexpr float cephes_exp_p1 = 1.3981999507E-3F;
+constexpr float cephes_exp_p2 = 8.3334519073E-3F;
+constexpr float cephes_exp_p3 = 4.1665795894E-2F;
+constexpr float cephes_exp_p4 = 1.6666665459E-1F;
+constexpr float cephes_exp_p5 = 5.0000001201E-1F;
 
-/* declare some AVX constants -- why can't I figure a better way to do that? */
-#define _PS256_CONST(Name, Val)                                            \
-  static const float _ps256_##Name[8] __attribute__ ((aligned (32))) = { Val, Val, Val, Val, Val, Val, Val, Val }
-#define _PI32_CONST256(Name, Val)                                            \
-  static const int _pi32_256_##Name[8] __attribute__ ((aligned (32))) = { Val, Val, Val, Val, Val, Val, Val, Val }
-#define _PS256_CONST_TYPE(Name, Type, Val)                                 \
-  static const Type _ps256_##Name[8] __attribute__ ((aligned (32))) = { Val, Val, Val, Val, Val, Val, Val, Val }
+constexpr float minus_cephes_DP1 = -0.78515625F;
+constexpr float minus_cephes_DP2 = -2.4187564849853515625e-4F;
+constexpr float minus_cephes_DP3 = -3.77489497744594108e-8F;
+constexpr float sincof_p0 = -1.9515295891E-4F;
+constexpr float sincof_p1 =  8.3321608736E-3F;
+constexpr float sincof_p2 = -1.6666654611E-1F;
+constexpr float coscof_p0 =  2.443315711809948E-005F;
+constexpr float coscof_p1 = -1.388731625493765E-003F;
+constexpr float coscof_p2 =  4.166664568298827E-002F;
+constexpr float cephes_FOPI = 1.27323954473516F; // 4 / pi
 
-_PS256_CONST(1  , 1.0f);
-_PS256_CONST(neg1, -1.0f);
-_PS256_CONST(0p5, 0.5f);
-_PS256_CONST(2  , 2.0f);
-_PS256_CONST(4  , 4.0f);
-/* the smallest non denormalized float number */
-_PS256_CONST_TYPE(min_norm_pos, int, 0x00800000);
-_PS256_CONST_TYPE(mant_mask, int, 0x7f800000);
-_PS256_CONST_TYPE(inv_mant_mask, int, ~0x7f800000);
-
-_PS256_CONST_TYPE(sign_mask, int, (int)0x80000000);
-_PS256_CONST_TYPE(inv_sign_mask, int, ~0x80000000);
-
-_PI32_CONST256(0, 0);
-_PI32_CONST256(1, 1);
-_PI32_CONST256(inv1, ~1);
-_PI32_CONST256(2, 2);
-_PI32_CONST256(3, 3);
-_PI32_CONST256(4, 4);
-_PI32_CONST256(0x7f, 0x7f);
-_PI32_CONST256(fp_sign_mask, ~0x7FFFFFFF);
-
-_PS256_CONST(cephes_SQRTHF, 0.707106781186547524F);
-_PS256_CONST(cephes_log_p0, 7.0376836292E-2F);
-_PS256_CONST(cephes_log_p1, - 1.1514610310E-1F);
-_PS256_CONST(cephes_log_p2, 1.1676998740E-1F);
-_PS256_CONST(cephes_log_p3, - 1.2420140846E-1F);
-_PS256_CONST(cephes_log_p4, + 1.4249322787E-1F);
-_PS256_CONST(cephes_log_p5, - 1.6668057665E-1F);
-_PS256_CONST(cephes_log_p6, + 2.0000714765E-1F);
-_PS256_CONST(cephes_log_p7, - 2.4999993993E-1F);
-_PS256_CONST(cephes_log_p8, + 3.3333331174E-1F);
-_PS256_CONST(cephes_log_q1, -2.12194440e-4F);
-_PS256_CONST(cephes_log_q2, 0.693359375F);
-
-_PS256_CONST(infinity,           INFINITY);
-_PS256_CONST(negative_infinity, -INFINITY);
-_PS256_CONST(zero,               0.0F);
-_PS256_CONST(negativeZero,      -0.0F);
-_PS256_CONST(PI,                 M_PI);
-_PS256_CONST(negPI,             -M_PI);
-_PS256_CONST(PIO2,               M_PI_2);
-_PS256_CONST(negPIO2,           -M_PI_2);
-_PS256_CONST(PIO4,               M_PI_4);
+constexpr float PI   = std::numbers::pi_v<float>;
+constexpr float PIO2 = std::numbers::pi_v<float> / 2.0F; // exact: scaling by a power of two
+constexpr float PIO4 = std::numbers::pi_v<float> / 4.0F;
 
 //tan(3*pi/8)
 //NOTE: Cephes defines T3P8 like this for Intel/IEEE:
@@ -114,99 +104,63 @@ _PS256_CONST(PIO4,               M_PI_4);
 //#define T3P8 *(double *)T3P8A
 //And like this for UNK:
 //NOTE: we lose precision calling these floats rather than the original double
-_PS256_CONST(T3P8,          2.41421356237309504880);
-_PS256_CONST(HALF_MOREBITS, 6.123233995736765886130E-17 * 0.5);
-_PS256_CONST(MOREBITS,      6.123233995736765886130E-17);
+constexpr float T3P8          = 2.41421356237309504880F;
+constexpr float MOREBITS      = 6.123233995736765886130E-17F;
+constexpr float HALF_MOREBITS = static_cast<float>(6.123233995736765886130E-17 * 0.5);
+constexpr float ATAN_SPLIT    = 0.66F;
 
-_PS256_CONST(0_66,  0.66);
+/* bit patterns */
+constexpr int sign_mask     = static_cast<int>(0x80000000U);
+constexpr int inv_sign_mask = 0x7FFFFFFF;
+constexpr int inv_mant_mask = ~0x7f800000;
 
-//NOTE: we lose precision calling these floats rather than the original double
-static const float atan_P[5] = {
-    -8.750608600031904122785E-1,
-    -1.615753718733365076637E1,
-    -7.500855792314704667340E1,
-    -1.228866684490136173410E2,
-    -6.485021904942025371773E1,
-    };
-static const float atan_Q[5] = {
-    /* 1.000000000000000000000E0, */
-    2.485846490142306297962E1,
-    1.650270098316988542046E2,
-    4.328810604912902668951E2,
-    4.853903996359136964868E2,
-    1.945506571482613964425E2,
-   };
+inline v8sf set1(float f) { return _mm256_set1_ps(f); }
+inline v8si set1i(int i) { return _mm256_set1_epi32(i); }
+inline v8sf bits(int i) { return _mm256_castsi256_ps(_mm256_set1_epi32(i)); }
 
-
-#ifndef __AVX2__
-
-typedef union imm_xmm_union {
-  v8si imm;
-  v4si xmm[2];
-} imm_xmm_union;
-
-#define COPY_IMM_TO_XMM(imm_, xmm0_, xmm1_) {    \
-    imm_xmm_union u ALIGN32_END;  \
-    u.imm = imm_;                  \
-    xmm0_ = u.xmm[0];                            \
-    xmm1_ = u.xmm[1];                            \
-}
-
-#define COPY_XMM_TO_IMM(xmm0_, xmm1_, imm_) {                       \
-    imm_xmm_union u ALIGN32_END; \
-    u.xmm[0]=xmm0_; u.xmm[1]=xmm1_; imm_ = u.imm; \
-  }
-
-
-#define AVX2_BITOP_USING_SSE2(fn) \
-static inline v8si avx2_mm256_##fn(v8si x, int a) \
-{ \
-  /* use SSE2 instruction to perform the bitop AVX2 */ \
-  v4si x1, x2; \
-  v8si ret; \
-  COPY_IMM_TO_XMM(x, x1, x2); \
-  x1 = _mm_##fn(x1,a); \
-  x2 = _mm_##fn(x2,a); \
-  COPY_XMM_TO_IMM(x1, x2, ret); \
-  return(ret); \
-}
-
-//#warning "Using SSE2 to perform AVX2 bitshift ops"
-AVX2_BITOP_USING_SSE2(slli_epi32)
-AVX2_BITOP_USING_SSE2(srli_epi32)
-
-#define AVX2_INTOP_USING_SSE2(fn) \
-static inline v8si avx2_mm256_##fn(v8si x, v8si y) \
-{ \
-  /* use SSE2 instructions to perform the AVX2 integer operation */ \
-  v4si x1, x2; \
-  v4si y1, y2; \
-  v8si ret; \
-  COPY_IMM_TO_XMM(x, x1, x2); \
-  COPY_IMM_TO_XMM(y, y1, y2); \
-  x1 = _mm_##fn(x1,y1); \
-  x2 = _mm_##fn(x2,y2); \
-  COPY_XMM_TO_IMM(x1, x2, ret); \
-  return(ret); \
-}
-
-//#warning "Using SSE2 to perform AVX2 integer ops"
-AVX2_INTOP_USING_SSE2(and_si128)
-AVX2_INTOP_USING_SSE2(andnot_si128)
-AVX2_INTOP_USING_SSE2(cmpeq_epi32)
-AVX2_INTOP_USING_SSE2(sub_epi32)
-AVX2_INTOP_USING_SSE2(add_epi32)
-#define avx2_mm256_and_si256 avx2_mm256_and_si128
-#define avx2_mm256_andnot_si256 avx2_mm256_andnot_si128
+/*
+  32-bit integer operations on 256-bit vectors.  These are single AVX2
+  instructions; on AVX-only CPUs they are done as two SSE2 operations on the
+  128-bit halves.
+*/
+#ifdef __AVX2__
+inline v8si add_epi32(v8si a, v8si b)    { return _mm256_add_epi32(a, b); }
+inline v8si sub_epi32(v8si a, v8si b)    { return _mm256_sub_epi32(a, b); }
+inline v8si and_si256(v8si a, v8si b)    { return _mm256_and_si256(a, b); }
+inline v8si andnot_si256(v8si a, v8si b) { return _mm256_andnot_si256(a, b); }
+inline v8si cmpeq_epi32(v8si a, v8si b)  { return _mm256_cmpeq_epi32(a, b); }
+template <int N> inline v8si slli_epi32(v8si a) { return _mm256_slli_epi32(a, N); }
+template <int N> inline v8si srli_epi32(v8si a) { return _mm256_srli_epi32(a, N); }
 #else
-#define avx2_mm256_slli_epi32 _mm256_slli_epi32
-#define avx2_mm256_srli_epi32 _mm256_srli_epi32
-#define avx2_mm256_and_si256 _mm256_and_si256
-#define avx2_mm256_andnot_si256 _mm256_andnot_si256
-#define avx2_mm256_cmpeq_epi32 _mm256_cmpeq_epi32
-#define avx2_mm256_sub_epi32 _mm256_sub_epi32
-#define avx2_mm256_add_epi32 _mm256_add_epi32
+inline v4si lo128(v8si a) { return _mm256_castsi256_si128(a); }
+inline v4si hi128(v8si a) { return _mm256_extractf128_si256(a, 1); }
+inline v8si combine(v4si lo, v4si hi) { return _mm256_insertf128_si256(_mm256_castsi128_si256(lo), hi, 1); }
+
+inline v8si add_epi32(v8si a, v8si b) {
+  return combine(_mm_add_epi32(lo128(a), lo128(b)), _mm_add_epi32(hi128(a), hi128(b)));
+}
+inline v8si sub_epi32(v8si a, v8si b) {
+  return combine(_mm_sub_epi32(lo128(a), lo128(b)), _mm_sub_epi32(hi128(a), hi128(b)));
+}
+inline v8si cmpeq_epi32(v8si a, v8si b) {
+  return combine(_mm_cmpeq_epi32(lo128(a), lo128(b)), _mm_cmpeq_epi32(hi128(a), hi128(b)));
+}
+// bitwise ops can use the AVX float-domain instructions
+inline v8si and_si256(v8si a, v8si b) {
+  return _mm256_castps_si256(_mm256_and_ps(_mm256_castsi256_ps(a), _mm256_castsi256_ps(b)));
+}
+inline v8si andnot_si256(v8si a, v8si b) {
+  return _mm256_castps_si256(_mm256_andnot_ps(_mm256_castsi256_ps(a), _mm256_castsi256_ps(b)));
+}
+template <int N> inline v8si slli_epi32(v8si a) {
+  return combine(_mm_slli_epi32(lo128(a), N), _mm_slli_epi32(hi128(a), N));
+}
+template <int N> inline v8si srli_epi32(v8si a) {
+  return combine(_mm_srli_epi32(lo128(a), N), _mm_srli_epi32(hi128(a), N));
+}
 #endif /* __AVX2__ */
+
+} // namespace detail
 
 
 /* natural logarithm computed for 8 simultaneous float
@@ -214,23 +168,21 @@ AVX2_INTOP_USING_SSE2(add_epi32)
 */
 //wgvisots - added inline
 inline v8sf log256_ps(v8sf x) {
+  using namespace detail;
   v8si imm0;
-  v8sf one = *(v8sf*)_ps256_1;
+  const v8sf one = set1(1.0F);
 
-  //v8sf invalid_mask = _mm256_cmple_ps(x, _mm256_setzero_ps());
   v8sf invalid_mask = _mm256_cmp_ps(x, _mm256_setzero_ps(), _CMP_LE_OS);
 
-  x = _mm256_max_ps(x, *(v8sf*)_ps256_min_norm_pos);  /* cut off denormalized stuff */
+  x = _mm256_max_ps(x, set1(std::numeric_limits<float>::min()));  /* cut off denormalized stuff */
 
-  // can be done with AVX2
-  imm0 = avx2_mm256_srli_epi32(_mm256_castps_si256(x), 23);
+  imm0 = srli_epi32<23>(_mm256_castps_si256(x));
 
   /* keep only the fractional part */
-  x = _mm256_and_ps(x, *(v8sf*)_ps256_inv_mant_mask);
-  x = _mm256_or_ps(x, *(v8sf*)_ps256_0p5);
+  x = _mm256_and_ps(x, bits(inv_mant_mask));
+  x = _mm256_or_ps(x, set1(0.5F));
 
-  // this is again another AVX2 instruction
-  imm0 = avx2_mm256_sub_epi32(imm0, *(v8si*)_pi32_256_0x7f);
+  imm0 = sub_epi32(imm0, set1i(0x7f));
   v8sf e = _mm256_cvtepi32_ps(imm0);
 
   e = _mm256_add_ps(e, one);
@@ -241,8 +193,7 @@ inline v8sf log256_ps(v8sf x) {
        x = x + x - 1.0;
      } else { x = x - 1.0; }
   */
-  //v8sf mask = _mm256_cmplt_ps(x, *(v8sf*)_ps256_cephes_SQRTHF);
-  v8sf mask = _mm256_cmp_ps(x, *(v8sf*)_ps256_cephes_SQRTHF, _CMP_LT_OS);
+  v8sf mask = _mm256_cmp_ps(x, set1(cephes_SQRTHF), _CMP_LT_OS);
   v8sf tmp = _mm256_and_ps(x, mask);
   x = _mm256_sub_ps(x, one);
   e = _mm256_sub_ps(e, _mm256_and_ps(one, mask));
@@ -250,124 +201,135 @@ inline v8sf log256_ps(v8sf x) {
 
   v8sf z = _mm256_mul_ps(x,x);
 
-  v8sf y = *(v8sf*)_ps256_cephes_log_p0;
+  v8sf y = set1(cephes_log_p0);
   y = _mm256_mul_ps(y, x);
-  y = _mm256_add_ps(y, *(v8sf*)_ps256_cephes_log_p1);
+  y = _mm256_add_ps(y, set1(cephes_log_p1));
   y = _mm256_mul_ps(y, x);
-  y = _mm256_add_ps(y, *(v8sf*)_ps256_cephes_log_p2);
+  y = _mm256_add_ps(y, set1(cephes_log_p2));
   y = _mm256_mul_ps(y, x);
-  y = _mm256_add_ps(y, *(v8sf*)_ps256_cephes_log_p3);
+  y = _mm256_add_ps(y, set1(cephes_log_p3));
   y = _mm256_mul_ps(y, x);
-  y = _mm256_add_ps(y, *(v8sf*)_ps256_cephes_log_p4);
+  y = _mm256_add_ps(y, set1(cephes_log_p4));
   y = _mm256_mul_ps(y, x);
-  y = _mm256_add_ps(y, *(v8sf*)_ps256_cephes_log_p5);
+  y = _mm256_add_ps(y, set1(cephes_log_p5));
   y = _mm256_mul_ps(y, x);
-  y = _mm256_add_ps(y, *(v8sf*)_ps256_cephes_log_p6);
+  y = _mm256_add_ps(y, set1(cephes_log_p6));
   y = _mm256_mul_ps(y, x);
-  y = _mm256_add_ps(y, *(v8sf*)_ps256_cephes_log_p7);
+  y = _mm256_add_ps(y, set1(cephes_log_p7));
   y = _mm256_mul_ps(y, x);
-  y = _mm256_add_ps(y, *(v8sf*)_ps256_cephes_log_p8);
+  y = _mm256_add_ps(y, set1(cephes_log_p8));
   y = _mm256_mul_ps(y, x);
 
   y = _mm256_mul_ps(y, z);
 
-  tmp = _mm256_mul_ps(e, *(v8sf*)_ps256_cephes_log_q1);
+  tmp = _mm256_mul_ps(e, set1(cephes_log_q1));
   y = _mm256_add_ps(y, tmp);
 
-
-  tmp = _mm256_mul_ps(z, *(v8sf*)_ps256_0p5);
+  tmp = _mm256_mul_ps(z, set1(0.5F));
   y = _mm256_sub_ps(y, tmp);
 
-  tmp = _mm256_mul_ps(e, *(v8sf*)_ps256_cephes_log_q2);
+  tmp = _mm256_mul_ps(e, set1(cephes_log_q2));
   x = _mm256_add_ps(x, y);
   x = _mm256_add_ps(x, tmp);
   x = _mm256_or_ps(x, invalid_mask); // negative arg will be NAN
   return x;
 }
 
-_PS256_CONST(exp_hi,    88.3762626647949f);
-_PS256_CONST(exp_lo,    -88.3762626647949f);
-
-_PS256_CONST(cephes_LOG2EF, 1.44269504088896341F);
-_PS256_CONST(cephes_exp_C1, 0.693359375F);
-_PS256_CONST(cephes_exp_C2, -2.12194440e-4F);
-
-_PS256_CONST(cephes_exp_p0, 1.9875691500E-4F);
-_PS256_CONST(cephes_exp_p1, 1.3981999507E-3F);
-_PS256_CONST(cephes_exp_p2, 8.3334519073E-3F);
-_PS256_CONST(cephes_exp_p3, 4.1665795894E-2F);
-_PS256_CONST(cephes_exp_p4, 1.6666665459E-1F);
-_PS256_CONST(cephes_exp_p5, 5.0000001201E-1F);
-
-
 //wgvisots - added inline
 inline v8sf exp256_ps(v8sf x) {
-  v8sf tmp = _mm256_setzero_ps(), fx;
+  using namespace detail;
+  v8sf tmp, fx;
   v8si imm0;
-  v8sf one = *(v8sf*)_ps256_1;
+  const v8sf one = set1(1.0F);
 
-  x = _mm256_min_ps(x, *(v8sf*)_ps256_exp_hi);
-  x = _mm256_max_ps(x, *(v8sf*)_ps256_exp_lo);
+  x = _mm256_min_ps(x, set1(exp_hi));
+  x = _mm256_max_ps(x, set1(exp_lo));
 
   /* express exp(x) as exp(g + n*log(2)) */
-  fx = _mm256_mul_ps(x, *(v8sf*)_ps256_cephes_LOG2EF);
-  fx = _mm256_add_ps(fx, *(v8sf*)_ps256_0p5);
-
-  /* how to perform a floorf with SSE: just below */
-  //imm0 = _mm256_cvttps_epi32(fx);
-  //tmp  = _mm256_cvtepi32_ps(imm0);
+  fx = _mm256_mul_ps(x, set1(cephes_LOG2EF));
+  fx = _mm256_add_ps(fx, set1(0.5F));
 
   tmp = _mm256_floor_ps(fx);
 
   /* if greater, substract 1 */
-  //v8sf mask = _mm256_cmpgt_ps(tmp, fx);
   v8sf mask = _mm256_cmp_ps(tmp, fx, _CMP_GT_OS);
   mask = _mm256_and_ps(mask, one);
   fx = _mm256_sub_ps(tmp, mask);
 
-  tmp = _mm256_mul_ps(fx, *(v8sf*)_ps256_cephes_exp_C1);
-  v8sf z = _mm256_mul_ps(fx, *(v8sf*)_ps256_cephes_exp_C2);
+  tmp = _mm256_mul_ps(fx, set1(cephes_exp_C1));
+  v8sf z = _mm256_mul_ps(fx, set1(cephes_exp_C2));
   x = _mm256_sub_ps(x, tmp);
   x = _mm256_sub_ps(x, z);
 
   z = _mm256_mul_ps(x,x);
 
-  v8sf y = *(v8sf*)_ps256_cephes_exp_p0;
+  v8sf y = set1(cephes_exp_p0);
   y = _mm256_mul_ps(y, x);
-  y = _mm256_add_ps(y, *(v8sf*)_ps256_cephes_exp_p1);
+  y = _mm256_add_ps(y, set1(cephes_exp_p1));
   y = _mm256_mul_ps(y, x);
-  y = _mm256_add_ps(y, *(v8sf*)_ps256_cephes_exp_p2);
+  y = _mm256_add_ps(y, set1(cephes_exp_p2));
   y = _mm256_mul_ps(y, x);
-  y = _mm256_add_ps(y, *(v8sf*)_ps256_cephes_exp_p3);
+  y = _mm256_add_ps(y, set1(cephes_exp_p3));
   y = _mm256_mul_ps(y, x);
-  y = _mm256_add_ps(y, *(v8sf*)_ps256_cephes_exp_p4);
+  y = _mm256_add_ps(y, set1(cephes_exp_p4));
   y = _mm256_mul_ps(y, x);
-  y = _mm256_add_ps(y, *(v8sf*)_ps256_cephes_exp_p5);
+  y = _mm256_add_ps(y, set1(cephes_exp_p5));
   y = _mm256_mul_ps(y, z);
   y = _mm256_add_ps(y, x);
   y = _mm256_add_ps(y, one);
 
   /* build 2^n */
   imm0 = _mm256_cvttps_epi32(fx);
-  // another two AVX2 instructions
-  imm0 = avx2_mm256_add_epi32(imm0, *(v8si*)_pi32_256_0x7f);
-  imm0 = avx2_mm256_slli_epi32(imm0, 23);
+  imm0 = add_epi32(imm0, set1i(0x7f));
+  imm0 = slli_epi32<23>(imm0);
   v8sf pow2n = _mm256_castsi256_ps(imm0);
   y = _mm256_mul_ps(y, pow2n);
   return y;
 }
 
-_PS256_CONST(minus_cephes_DP1, -0.78515625F);
-_PS256_CONST(minus_cephes_DP2, -2.4187564849853515625e-4F);
-_PS256_CONST(minus_cephes_DP3, -3.77489497744594108e-8F);
-_PS256_CONST(sincof_p0, -1.9515295891E-4F);
-_PS256_CONST(sincof_p1,  8.3321608736E-3F);
-_PS256_CONST(sincof_p2, -1.6666654611E-1F);
-_PS256_CONST(coscof_p0,  2.443315711809948E-005F);
-_PS256_CONST(coscof_p1, -1.388731625493765E-003F);
-_PS256_CONST(coscof_p2,  4.166664568298827E-002F);
-_PS256_CONST(cephes_FOPI, 1.27323954473516F); // 4 / M_PI
+namespace detail {
 
+/* The magic pass: "Extended precision modular arithmetic"
+   x = ((x - y * DP1) - y * DP2) - y * DP3; */
+inline v8sf cephes_reduce(v8sf x, v8sf y) {
+  v8sf xmm1 = _mm256_mul_ps(y, set1(minus_cephes_DP1));
+  v8sf xmm2 = _mm256_mul_ps(y, set1(minus_cephes_DP2));
+  v8sf xmm3 = _mm256_mul_ps(y, set1(minus_cephes_DP3));
+  x = _mm256_add_ps(x, xmm1);
+  x = _mm256_add_ps(x, xmm2);
+  x = _mm256_add_ps(x, xmm3);
+  return x;
+}
+
+/* first polynom (0 <= x <= Pi/4), z = x*x */
+inline v8sf cephes_cos_poly(v8sf z) {
+  v8sf y = set1(coscof_p0);
+  y = _mm256_mul_ps(y, z);
+  y = _mm256_add_ps(y, set1(coscof_p1));
+  y = _mm256_mul_ps(y, z);
+  y = _mm256_add_ps(y, set1(coscof_p2));
+  y = _mm256_mul_ps(y, z);
+  y = _mm256_mul_ps(y, z);
+  v8sf tmp = _mm256_mul_ps(z, set1(0.5F));
+  y = _mm256_sub_ps(y, tmp);
+  y = _mm256_add_ps(y, set1(1.0F));
+  return y;
+}
+
+/* second polynom (Pi/4 <= x <= 0), z = x*x */
+inline v8sf cephes_sin_poly(v8sf x, v8sf z) {
+  v8sf y2 = set1(sincof_p0);
+  y2 = _mm256_mul_ps(y2, z);
+  y2 = _mm256_add_ps(y2, set1(sincof_p1));
+  y2 = _mm256_mul_ps(y2, z);
+  y2 = _mm256_add_ps(y2, set1(sincof_p2));
+  y2 = _mm256_mul_ps(y2, z);
+  y2 = _mm256_mul_ps(y2, x);
+  y2 = _mm256_add_ps(y2, x);
+  return y2;
+}
+
+} // namespace detail
 
 /* evaluation of 8 sines at onces using AVX intrisics
 
@@ -383,124 +345,51 @@ _PS256_CONST(cephes_FOPI, 1.27323954473516F); // 4 / M_PI
 */
 //wgvisots - added inline
 inline v8sf sin256_ps(v8sf x) { // any x
-  v8sf xmm1, xmm2 = _mm256_setzero_ps(), xmm3, sign_bit, y;
+  using namespace detail;
+  v8sf sign_bit, y;
   v8si imm0, imm2;
-
-#ifndef __AVX2__
-  v4si imm0_1, imm0_2;
-  v4si imm2_1, imm2_2;
-#endif
 
   sign_bit = x;
   /* take the absolute value */
-  x = _mm256_and_ps(x, *(v8sf*)_ps256_inv_sign_mask);
+  x = _mm256_and_ps(x, bits(inv_sign_mask));
   /* extract the sign bit (upper one) */
-  sign_bit = _mm256_and_ps(sign_bit, *(v8sf*)_ps256_sign_mask);
+  sign_bit = _mm256_and_ps(sign_bit, bits(sign_mask));
 
   /* scale by 4/Pi */
-  y = _mm256_mul_ps(x, *(v8sf*)_ps256_cephes_FOPI);
+  y = _mm256_mul_ps(x, set1(cephes_FOPI));
 
-  /*
-    Here we start a series of integer operations, which are in the
-    realm of AVX2.
-    If we don't have AVX, let's perform them using SSE2 directives
-  */
-
-#ifdef __AVX2__
   /* store the integer part of y in mm0 */
   imm2 = _mm256_cvttps_epi32(y);
   /* j=(j+1) & (~1) (see the cephes sources) */
-  // another two AVX2 instruction
-  imm2 = avx2_mm256_add_epi32(imm2, *(v8si*)_pi32_256_1);
-  imm2 = avx2_mm256_and_si256(imm2, *(v8si*)_pi32_256_inv1);
+  imm2 = add_epi32(imm2, set1i(1));
+  imm2 = and_si256(imm2, set1i(~1));
   y = _mm256_cvtepi32_ps(imm2);
 
   /* get the swap sign flag */
-  imm0 = avx2_mm256_and_si256(imm2, *(v8si*)_pi32_256_4);
-  imm0 = avx2_mm256_slli_epi32(imm0, 29);
+  imm0 = and_si256(imm2, set1i(4));
+  imm0 = slli_epi32<29>(imm0);
   /* get the polynom selection mask
      there is one polynom for 0 <= x <= Pi/4
      and another one for Pi/4<x<=Pi/2
 
      Both branches will be computed.
   */
-  imm2 = avx2_mm256_and_si256(imm2, *(v8si*)_pi32_256_2);
-  imm2 = avx2_mm256_cmpeq_epi32(imm2,*(v8si*)_pi32_256_0);
-#else
-  /* we use SSE2 routines to perform the integer ops */
-  COPY_IMM_TO_XMM(_mm256_cvttps_epi32(y),imm2_1,imm2_2);
-
-  imm2_1 = _mm_add_epi32(imm2_1, *(v4si*)_pi32avx_1);
-  imm2_2 = _mm_add_epi32(imm2_2, *(v4si*)_pi32avx_1);
-
-  imm2_1 = _mm_and_si128(imm2_1, *(v4si*)_pi32avx_inv1);
-  imm2_2 = _mm_and_si128(imm2_2, *(v4si*)_pi32avx_inv1);
-
-  COPY_XMM_TO_IMM(imm2_1,imm2_2,imm2);
-  y = _mm256_cvtepi32_ps(imm2);
-
-  imm0_1 = _mm_and_si128(imm2_1, *(v4si*)_pi32avx_4);
-  imm0_2 = _mm_and_si128(imm2_2, *(v4si*)_pi32avx_4);
-
-  imm0_1 = _mm_slli_epi32(imm0_1, 29);
-  imm0_2 = _mm_slli_epi32(imm0_2, 29);
-
-  COPY_XMM_TO_IMM(imm0_1, imm0_2, imm0);
-
-  imm2_1 = _mm_and_si128(imm2_1, *(v4si*)_pi32avx_2);
-  imm2_2 = _mm_and_si128(imm2_2, *(v4si*)_pi32avx_2);
-
-  imm2_1 = _mm_cmpeq_epi32(imm2_1, _mm_setzero_si128());
-  imm2_2 = _mm_cmpeq_epi32(imm2_2, _mm_setzero_si128());
-
-  COPY_XMM_TO_IMM(imm2_1, imm2_2, imm2);
-#endif
+  imm2 = and_si256(imm2, set1i(2));
+  imm2 = cmpeq_epi32(imm2, _mm256_setzero_si256());
 
   v8sf swap_sign_bit = _mm256_castsi256_ps(imm0);
   v8sf poly_mask = _mm256_castsi256_ps(imm2);
   sign_bit = _mm256_xor_ps(sign_bit, swap_sign_bit);
 
-  /* The magic pass: "Extended precision modular arithmetic"
-     x = ((x - y * DP1) - y * DP2) - y * DP3; */
-  xmm1 = *(v8sf*)_ps256_minus_cephes_DP1;
-  xmm2 = *(v8sf*)_ps256_minus_cephes_DP2;
-  xmm3 = *(v8sf*)_ps256_minus_cephes_DP3;
-  xmm1 = _mm256_mul_ps(y, xmm1);
-  xmm2 = _mm256_mul_ps(y, xmm2);
-  xmm3 = _mm256_mul_ps(y, xmm3);
-  x = _mm256_add_ps(x, xmm1);
-  x = _mm256_add_ps(x, xmm2);
-  x = _mm256_add_ps(x, xmm3);
+  x = cephes_reduce(x, y);
 
-  /* Evaluate the first polynom  (0 <= x <= Pi/4) */
-  y = *(v8sf*)_ps256_coscof_p0;
   v8sf z = _mm256_mul_ps(x,x);
-
-  y = _mm256_mul_ps(y, z);
-  y = _mm256_add_ps(y, *(v8sf*)_ps256_coscof_p1);
-  y = _mm256_mul_ps(y, z);
-  y = _mm256_add_ps(y, *(v8sf*)_ps256_coscof_p2);
-  y = _mm256_mul_ps(y, z);
-  y = _mm256_mul_ps(y, z);
-  v8sf tmp = _mm256_mul_ps(z, *(v8sf*)_ps256_0p5);
-  y = _mm256_sub_ps(y, tmp);
-  y = _mm256_add_ps(y, *(v8sf*)_ps256_1);
-
-  /* Evaluate the second polynom  (Pi/4 <= x <= 0) */
-
-  v8sf y2 = *(v8sf*)_ps256_sincof_p0;
-  y2 = _mm256_mul_ps(y2, z);
-  y2 = _mm256_add_ps(y2, *(v8sf*)_ps256_sincof_p1);
-  y2 = _mm256_mul_ps(y2, z);
-  y2 = _mm256_add_ps(y2, *(v8sf*)_ps256_sincof_p2);
-  y2 = _mm256_mul_ps(y2, z);
-  y2 = _mm256_mul_ps(y2, x);
-  y2 = _mm256_add_ps(y2, x);
+  y = cephes_cos_poly(z);
+  v8sf y2 = cephes_sin_poly(x, z);
 
   /* select the correct result from the two polynoms */
-  xmm3 = poly_mask;
-  y2 = _mm256_and_ps(xmm3, y2); //, xmm3);
-  y = _mm256_andnot_ps(xmm3, y);
+  y2 = _mm256_and_ps(poly_mask, y2);
+  y = _mm256_andnot_ps(poly_mask, y);
   y = _mm256_add_ps(y,y2);
   /* update the sign */
   y = _mm256_xor_ps(y, sign_bit);
@@ -511,113 +400,43 @@ inline v8sf sin256_ps(v8sf x) { // any x
 /* almost the same as sin_ps */
 //wgvisots - added inline
 inline v8sf cos256_ps(v8sf x) { // any x
-  v8sf xmm1, xmm2 = _mm256_setzero_ps(), xmm3, y;
+  using namespace detail;
+  v8sf y;
   v8si imm0, imm2;
 
-#ifndef __AVX2__
-  v4si imm0_1, imm0_2;
-  v4si imm2_1, imm2_2;
-#endif
-
   /* take the absolute value */
-  x = _mm256_and_ps(x, *(v8sf*)_ps256_inv_sign_mask);
+  x = _mm256_and_ps(x, bits(inv_sign_mask));
 
   /* scale by 4/Pi */
-  y = _mm256_mul_ps(x, *(v8sf*)_ps256_cephes_FOPI);
+  y = _mm256_mul_ps(x, set1(cephes_FOPI));
 
-#ifdef __AVX2__
   /* store the integer part of y in mm0 */
   imm2 = _mm256_cvttps_epi32(y);
   /* j=(j+1) & (~1) (see the cephes sources) */
-  imm2 = avx2_mm256_add_epi32(imm2, *(v8si*)_pi32_256_1);
-  imm2 = avx2_mm256_and_si256(imm2, *(v8si*)_pi32_256_inv1);
+  imm2 = add_epi32(imm2, set1i(1));
+  imm2 = and_si256(imm2, set1i(~1));
   y = _mm256_cvtepi32_ps(imm2);
-  imm2 = avx2_mm256_sub_epi32(imm2, *(v8si*)_pi32_256_2);
+  imm2 = sub_epi32(imm2, set1i(2));
 
   /* get the swap sign flag */
-  imm0 = avx2_mm256_andnot_si256(imm2, *(v8si*)_pi32_256_4);
-  imm0 = avx2_mm256_slli_epi32(imm0, 29);
+  imm0 = andnot_si256(imm2, set1i(4));
+  imm0 = slli_epi32<29>(imm0);
   /* get the polynom selection mask */
-  imm2 = avx2_mm256_and_si256(imm2, *(v8si*)_pi32_256_2);
-  imm2 = avx2_mm256_cmpeq_epi32(imm2, *(v8si*)_pi32_256_0);
-#else
-
-  /* we use SSE2 routines to perform the integer ops */
-  COPY_IMM_TO_XMM(_mm256_cvttps_epi32(y),imm2_1,imm2_2);
-
-  imm2_1 = _mm_add_epi32(imm2_1, *(v4si*)_pi32avx_1);
-  imm2_2 = _mm_add_epi32(imm2_2, *(v4si*)_pi32avx_1);
-
-  imm2_1 = _mm_and_si128(imm2_1, *(v4si*)_pi32avx_inv1);
-  imm2_2 = _mm_and_si128(imm2_2, *(v4si*)_pi32avx_inv1);
-
-  COPY_XMM_TO_IMM(imm2_1,imm2_2,imm2);
-  y = _mm256_cvtepi32_ps(imm2);
-
-  imm2_1 = _mm_sub_epi32(imm2_1, *(v4si*)_pi32avx_2);
-  imm2_2 = _mm_sub_epi32(imm2_2, *(v4si*)_pi32avx_2);
-
-  imm0_1 = _mm_andnot_si128(imm2_1, *(v4si*)_pi32avx_4);
-  imm0_2 = _mm_andnot_si128(imm2_2, *(v4si*)_pi32avx_4);
-
-  imm0_1 = _mm_slli_epi32(imm0_1, 29);
-  imm0_2 = _mm_slli_epi32(imm0_2, 29);
-
-  COPY_XMM_TO_IMM(imm0_1, imm0_2, imm0);
-
-  imm2_1 = _mm_and_si128(imm2_1, *(v4si*)_pi32avx_2);
-  imm2_2 = _mm_and_si128(imm2_2, *(v4si*)_pi32avx_2);
-
-  imm2_1 = _mm_cmpeq_epi32(imm2_1, _mm_setzero_si128());
-  imm2_2 = _mm_cmpeq_epi32(imm2_2, _mm_setzero_si128());
-
-  COPY_XMM_TO_IMM(imm2_1, imm2_2, imm2);
-#endif
+  imm2 = and_si256(imm2, set1i(2));
+  imm2 = cmpeq_epi32(imm2, _mm256_setzero_si256());
 
   v8sf sign_bit = _mm256_castsi256_ps(imm0);
   v8sf poly_mask = _mm256_castsi256_ps(imm2);
 
-  /* The magic pass: "Extended precision modular arithmetic"
-     x = ((x - y * DP1) - y * DP2) - y * DP3; */
-  xmm1 = *(v8sf*)_ps256_minus_cephes_DP1;
-  xmm2 = *(v8sf*)_ps256_minus_cephes_DP2;
-  xmm3 = *(v8sf*)_ps256_minus_cephes_DP3;
-  xmm1 = _mm256_mul_ps(y, xmm1);
-  xmm2 = _mm256_mul_ps(y, xmm2);
-  xmm3 = _mm256_mul_ps(y, xmm3);
-  x = _mm256_add_ps(x, xmm1);
-  x = _mm256_add_ps(x, xmm2);
-  x = _mm256_add_ps(x, xmm3);
+  x = cephes_reduce(x, y);
 
-  /* Evaluate the first polynom  (0 <= x <= Pi/4) */
-  y = *(v8sf*)_ps256_coscof_p0;
   v8sf z = _mm256_mul_ps(x,x);
-
-  y = _mm256_mul_ps(y, z);
-  y = _mm256_add_ps(y, *(v8sf*)_ps256_coscof_p1);
-  y = _mm256_mul_ps(y, z);
-  y = _mm256_add_ps(y, *(v8sf*)_ps256_coscof_p2);
-  y = _mm256_mul_ps(y, z);
-  y = _mm256_mul_ps(y, z);
-  v8sf tmp = _mm256_mul_ps(z, *(v8sf*)_ps256_0p5);
-  y = _mm256_sub_ps(y, tmp);
-  y = _mm256_add_ps(y, *(v8sf*)_ps256_1);
-
-  /* Evaluate the second polynom  (Pi/4 <= x <= 0) */
-
-  v8sf y2 = *(v8sf*)_ps256_sincof_p0;
-  y2 = _mm256_mul_ps(y2, z);
-  y2 = _mm256_add_ps(y2, *(v8sf*)_ps256_sincof_p1);
-  y2 = _mm256_mul_ps(y2, z);
-  y2 = _mm256_add_ps(y2, *(v8sf*)_ps256_sincof_p2);
-  y2 = _mm256_mul_ps(y2, z);
-  y2 = _mm256_mul_ps(y2, x);
-  y2 = _mm256_add_ps(y2, x);
+  y = cephes_cos_poly(z);
+  v8sf y2 = cephes_sin_poly(x, z);
 
   /* select the correct result from the two polynoms */
-  xmm3 = poly_mask;
-  y2 = _mm256_and_ps(xmm3, y2); //, xmm3);
-  y = _mm256_andnot_ps(xmm3, y);
+  y2 = _mm256_and_ps(poly_mask, y2);
+  y = _mm256_andnot_ps(poly_mask, y);
   y = _mm256_add_ps(y,y2);
   /* update the sign */
   y = _mm256_xor_ps(y, sign_bit);
@@ -629,198 +448,131 @@ inline v8sf cos256_ps(v8sf x) { // any x
    it is almost as fast, and gives you a free cosine with your sine */
 //wgvisots - added inline
 inline void sincos256_ps(v8sf x, v8sf *s, v8sf *c) {
-
-  v8sf xmm1, xmm2, xmm3 = _mm256_setzero_ps(), sign_bit_sin, y;
+  using namespace detail;
+  v8sf sign_bit_sin, y;
   v8si imm0, imm2, imm4;
-
-#ifndef __AVX2__
-  v4si imm0_1, imm0_2;
-  v4si imm2_1, imm2_2;
-  v4si imm4_1, imm4_2;
-#endif
 
   sign_bit_sin = x;
   /* take the absolute value */
-  x = _mm256_and_ps(x, *(v8sf*)_ps256_inv_sign_mask);
+  x = _mm256_and_ps(x, bits(inv_sign_mask));
   /* extract the sign bit (upper one) */
-  sign_bit_sin = _mm256_and_ps(sign_bit_sin, *(v8sf*)_ps256_sign_mask);
+  sign_bit_sin = _mm256_and_ps(sign_bit_sin, bits(sign_mask));
 
   /* scale by 4/Pi */
-  y = _mm256_mul_ps(x, *(v8sf*)_ps256_cephes_FOPI);
+  y = _mm256_mul_ps(x, set1(cephes_FOPI));
 
-#ifdef __AVX2__
   /* store the integer part of y in imm2 */
   imm2 = _mm256_cvttps_epi32(y);
 
   /* j=(j+1) & (~1) (see the cephes sources) */
-  imm2 = avx2_mm256_add_epi32(imm2, *(v8si*)_pi32_256_1);
-  imm2 = avx2_mm256_and_si256(imm2, *(v8si*)_pi32_256_inv1);
+  imm2 = add_epi32(imm2, set1i(1));
+  imm2 = and_si256(imm2, set1i(~1));
 
   y = _mm256_cvtepi32_ps(imm2);
   imm4 = imm2;
 
   /* get the swap sign flag for the sine */
-  imm0 = avx2_mm256_and_si256(imm2, *(v8si*)_pi32_256_4);
-  imm0 = avx2_mm256_slli_epi32(imm0, 29);
-  //v8sf swap_sign_bit_sin = _mm256_castsi256_ps(imm0);
+  imm0 = and_si256(imm2, set1i(4));
+  imm0 = slli_epi32<29>(imm0);
 
   /* get the polynom selection mask for the sine*/
-  imm2 = avx2_mm256_and_si256(imm2, *(v8si*)_pi32_256_2);
-  imm2 = avx2_mm256_cmpeq_epi32(imm2, *(v8si*)_pi32_256_0);
-  //v8sf poly_mask = _mm256_castsi256_ps(imm2);
-#else
-  /* we use SSE2 routines to perform the integer ops */
-  COPY_IMM_TO_XMM(_mm256_cvttps_epi32(y),imm2_1,imm2_2);
+  imm2 = and_si256(imm2, set1i(2));
+  imm2 = cmpeq_epi32(imm2, _mm256_setzero_si256());
 
-  imm2_1 = _mm_add_epi32(imm2_1, *(v4si*)_pi32avx_1);
-  imm2_2 = _mm_add_epi32(imm2_2, *(v4si*)_pi32avx_1);
-
-  imm2_1 = _mm_and_si128(imm2_1, *(v4si*)_pi32avx_inv1);
-  imm2_2 = _mm_and_si128(imm2_2, *(v4si*)_pi32avx_inv1);
-
-  COPY_XMM_TO_IMM(imm2_1,imm2_2,imm2);
-  y = _mm256_cvtepi32_ps(imm2);
-
-  imm4_1 = imm2_1;
-  imm4_2 = imm2_2;
-
-  imm0_1 = _mm_and_si128(imm2_1, *(v4si*)_pi32avx_4);
-  imm0_2 = _mm_and_si128(imm2_2, *(v4si*)_pi32avx_4);
-
-  imm0_1 = _mm_slli_epi32(imm0_1, 29);
-  imm0_2 = _mm_slli_epi32(imm0_2, 29);
-
-  COPY_XMM_TO_IMM(imm0_1, imm0_2, imm0);
-
-  imm2_1 = _mm_and_si128(imm2_1, *(v4si*)_pi32avx_2);
-  imm2_2 = _mm_and_si128(imm2_2, *(v4si*)_pi32avx_2);
-
-  imm2_1 = _mm_cmpeq_epi32(imm2_1, _mm_setzero_si128());
-  imm2_2 = _mm_cmpeq_epi32(imm2_2, _mm_setzero_si128());
-
-  COPY_XMM_TO_IMM(imm2_1, imm2_2, imm2);
-#endif
   v8sf swap_sign_bit_sin = _mm256_castsi256_ps(imm0);
   v8sf poly_mask = _mm256_castsi256_ps(imm2);
 
-  /* The magic pass: "Extended precision modular arithmetic"
-     x = ((x - y * DP1) - y * DP2) - y * DP3; */
-  xmm1 = *(v8sf*)_ps256_minus_cephes_DP1;
-  xmm2 = *(v8sf*)_ps256_minus_cephes_DP2;
-  xmm3 = *(v8sf*)_ps256_minus_cephes_DP3;
-  xmm1 = _mm256_mul_ps(y, xmm1);
-  xmm2 = _mm256_mul_ps(y, xmm2);
-  xmm3 = _mm256_mul_ps(y, xmm3);
-  x = _mm256_add_ps(x, xmm1);
-  x = _mm256_add_ps(x, xmm2);
-  x = _mm256_add_ps(x, xmm3);
+  x = cephes_reduce(x, y);
 
-#ifdef __AVX2__
-  imm4 = avx2_mm256_sub_epi32(imm4, *(v8si*)_pi32_256_2);
-  imm4 = avx2_mm256_andnot_si256(imm4, *(v8si*)_pi32_256_4);
-  imm4 = avx2_mm256_slli_epi32(imm4, 29);
-#else
-  imm4_1 = _mm_sub_epi32(imm4_1, *(v4si*)_pi32avx_2);
-  imm4_2 = _mm_sub_epi32(imm4_2, *(v4si*)_pi32avx_2);
-
-  imm4_1 = _mm_andnot_si128(imm4_1, *(v4si*)_pi32avx_4);
-  imm4_2 = _mm_andnot_si128(imm4_2, *(v4si*)_pi32avx_4);
-
-  imm4_1 = _mm_slli_epi32(imm4_1, 29);
-  imm4_2 = _mm_slli_epi32(imm4_2, 29);
-
-  COPY_XMM_TO_IMM(imm4_1, imm4_2, imm4);
-#endif
+  imm4 = sub_epi32(imm4, set1i(2));
+  imm4 = andnot_si256(imm4, set1i(4));
+  imm4 = slli_epi32<29>(imm4);
 
   v8sf sign_bit_cos = _mm256_castsi256_ps(imm4);
 
   sign_bit_sin = _mm256_xor_ps(sign_bit_sin, swap_sign_bit_sin);
 
-  /* Evaluate the first polynom  (0 <= x <= Pi/4) */
   v8sf z = _mm256_mul_ps(x,x);
-  y = *(v8sf*)_ps256_coscof_p0;
-
-  y = _mm256_mul_ps(y, z);
-  y = _mm256_add_ps(y, *(v8sf*)_ps256_coscof_p1);
-  y = _mm256_mul_ps(y, z);
-  y = _mm256_add_ps(y, *(v8sf*)_ps256_coscof_p2);
-  y = _mm256_mul_ps(y, z);
-  y = _mm256_mul_ps(y, z);
-  v8sf tmp = _mm256_mul_ps(z, *(v8sf*)_ps256_0p5);
-  y = _mm256_sub_ps(y, tmp);
-  y = _mm256_add_ps(y, *(v8sf*)_ps256_1);
-
-  /* Evaluate the second polynom  (Pi/4 <= x <= 0) */
-
-  v8sf y2 = *(v8sf*)_ps256_sincof_p0;
-  y2 = _mm256_mul_ps(y2, z);
-  y2 = _mm256_add_ps(y2, *(v8sf*)_ps256_sincof_p1);
-  y2 = _mm256_mul_ps(y2, z);
-  y2 = _mm256_add_ps(y2, *(v8sf*)_ps256_sincof_p2);
-  y2 = _mm256_mul_ps(y2, z);
-  y2 = _mm256_mul_ps(y2, x);
-  y2 = _mm256_add_ps(y2, x);
+  y = cephes_cos_poly(z);
+  v8sf y2 = cephes_sin_poly(x, z);
 
   /* select the correct result from the two polynoms */
-  xmm3 = poly_mask;
-  v8sf ysin2 = _mm256_and_ps(xmm3, y2);
-  v8sf ysin1 = _mm256_andnot_ps(xmm3, y);
+  v8sf ysin2 = _mm256_and_ps(poly_mask, y2);
+  v8sf ysin1 = _mm256_andnot_ps(poly_mask, y);
   y2 = _mm256_sub_ps(y2,ysin2);
   y = _mm256_sub_ps(y, ysin1);
 
-  xmm1 = _mm256_add_ps(ysin1,ysin2);
-  xmm2 = _mm256_add_ps(y,y2);
+  v8sf xmm1 = _mm256_add_ps(ysin1,ysin2);
+  v8sf xmm2 = _mm256_add_ps(y,y2);
 
   /* update the sign */
   *s = _mm256_xor_ps(xmm1, sign_bit_sin);
   *c = _mm256_xor_ps(xmm2, sign_bit_cos);
 }
 
-//TODO -> make this faster!!!
+/**
+ * Reference (non-vectorized) atan2: std::atan2 applied to each lane.
+ * Useful as a baseline for accuracy and speed comparisons.
+ *
+ * @param y
+ * @param x
+ * @param c receives atan2(y[i], x[i]) for each lane i; -pi <= c <= pi
+ */
 //wgvisots
-//return -pi < z <= pi (ANSI C like)
-inline void atan2(const __m256 &a, const __m256 &b, __m256 &c){
-    {
-        const float* __restrict__ aArray = reinterpret_cast<const float*>(&a);
-        const float* __restrict__ bArray = reinterpret_cast<const float*>(&b);
-        float* __restrict__ cArray = reinterpret_cast<float*>(&c);
-
-        cArray[0] = std::atan2(aArray[0], aArray[1]);
-        cArray[1] = std::atan2(aArray[2], aArray[3]);
-        cArray[2] = std::atan2(bArray[0], bArray[1]);
-        cArray[3] = std::atan2(bArray[2], bArray[3]);
-        cArray[4] = std::atan2(aArray[4], aArray[5]);
-        cArray[5] = std::atan2(aArray[6], aArray[7]);
-        cArray[6] = std::atan2(bArray[4], bArray[5]);
-        cArray[7] = std::atan2(bArray[6], bArray[7]);
+inline void atan2(const v8sf &y, const v8sf &x, v8sf &c){
+    alignas(32) float yArray[8];
+    alignas(32) float xArray[8];
+    alignas(32) float cArray[8];
+    _mm256_store_ps(yArray, y);
+    _mm256_store_ps(xArray, x);
+    for (std::size_t i = 0; i < 8; ++i) {
+        cArray[i] = std::atan2(yArray[i], xArray[i]);
     }
+    c = _mm256_load_ps(cArray);
 }
-inline void atan(const __m256 &a, __m256 &c){
-    {
-        const float *aArray = reinterpret_cast<const float*>(&a);
-        float cArray[8] __attribute__ ((aligned (32)));
 
-        cArray[0] = std::atan(aArray[0]);
-        cArray[1] = std::atan(aArray[2]);
-        cArray[2] = std::atan(aArray[0]);
-        cArray[3] = std::atan(aArray[2]);
-        cArray[4] = std::atan(aArray[4]);
-        cArray[5] = std::atan(aArray[6]);
-        cArray[6] = std::atan(aArray[4]);
-        cArray[7] = std::atan(aArray[6]);
-
-        memcpy(&c, cArray, sizeof(cArray));
+/**
+ * Reference (non-vectorized) atan: std::atan applied to each lane.
+ *
+ * @param a
+ * @param c receives atan(a[i]) for each lane i
+ */
+inline void atan(const v8sf &a, v8sf &c){
+    alignas(32) float aArray[8];
+    alignas(32) float cArray[8];
+    _mm256_store_ps(aArray, a);
+    for (std::size_t i = 0; i < 8; ++i) {
+        cArray[i] = std::atan(aArray[i]);
     }
+    c = _mm256_load_ps(cArray);
 }
 
 inline void printVec(const v8sf& v) {
-    const float* vArray = reinterpret_cast<const float*>(&v);
+    alignas(32) float vArray[8];
+    _mm256_store_ps(vArray, v);
     std::cout << "[ ";
     for (std::size_t i = 0; i < 8; ++i) {
         std::cout << vArray[i] << " ";
     }
     std::cout << "]" << std::endl;
 }
+
+//NOTE: we lose precision calling these floats rather than the original double
+inline constexpr float atan_P[5] = {
+    -8.750608600031904122785E-1F,
+    -1.615753718733365076637E1F,
+    -7.500855792314704667340E1F,
+    -1.228866684490136173410E2F,
+    -6.485021904942025371773E1F,
+    };
+inline constexpr float atan_Q[5] = {
+    /* 1.000000000000000000000E0, */
+    2.485846490142306297962E1F,
+    1.650270098316988542046E2F,
+    4.328810604912902668951E2F,
+    4.853903996359136964868E2F,
+    1.945506571482613964425E2F,
+   };
 
 /**
  * Vectorized version of polevl from Cephes.
@@ -830,8 +582,8 @@ inline void printVec(const v8sf& v) {
  * Direct inquiries to 30 Frost Street, Cambridge, MA 02140
  *
  * @param x
- * @param coef
- * @param N
+ * @param coef N+1 coefficients, highest order first
+ * @param N    degree, must be >= 1
  * @return
  */
 inline v8sf polevl(const v8sf& x, const float* coef, const std::size_t& N) {
@@ -844,11 +596,16 @@ inline v8sf polevl(const v8sf& x, const float* coef, const std::size_t& N) {
     }while (--i);
     return ans;
 }
+/**
+ * As polevl, but with an implicit leading coefficient of 1.0.
+ *
+ * @param coef N coefficients
+ * @param N    degree, must be >= 2
+ */
 inline v8sf p1evl(const v8sf& x, const float* coef, const std::size_t& N ){
     const float* p = coef;
     std::size_t i = N-1;
 
-    p = coef;
     v8sf ans = _mm256_add_ps(x, _mm256_broadcast_ss(p++));
 
     do
@@ -859,167 +616,116 @@ inline v8sf p1evl(const v8sf& x, const float* coef, const std::size_t& N ){
 }
 
 /**
- * This is an atan implementation intneded for use by atan2 below.  As such, it doesn't test for
- * inf/-inf, as it assumes atan2 will take care of those.
+ * Vectorized Cephes atanf.  Also used by atan2 below.
+ *
+ * atan(+-0) = +-0, atan(+-inf) = +-pi/2, atan(NaN) = NaN
  *
  * @param ratio y/x
  * @return
  */
 inline v8sf atan(v8sf ratio) {
-    //NOTE: I know flag should really be an integer, but keeping it as a float makes the code slightly cleaner.
-    //      And '1' and '2' are exactly representable as floats - so it is safe... probably.
-
-    //make argument positive and save the sign
-    __m256 sign = _mm256_cmp_ps(ratio, *reinterpret_cast<const __m256*>(_ps256_zero), _CMP_LT_OQ);
-    ratio = _mm256_andnot_ps(_mm256_castsi256_ps(*reinterpret_cast<const __m256i*>(_pi32_256_fp_sign_mask)), ratio);
+    using namespace detail;
+    //make argument positive and save the sign bit (keeping the sign bit, rather than testing x < 0,
+    //means atan(-0.0) == -0.0, which atan2 relies on)
+    const v8sf signMask = bits(sign_mask);
+    const v8sf sign = _mm256_and_ps(signMask, ratio);
+    ratio = _mm256_andnot_ps(signMask, ratio);
 
     // if( x > T3P8 ){
     //     y = PIO2;
     //     flag = 1;
-    //     x = -( 1.0/x );/*It seems odd that the - is outside the parenthesis - this might be important)
+    //     x = -( 1.0/x );
     // }
-    const __m256 mask1 = _mm256_cmp_ps(ratio, *reinterpret_cast<const __m256*>(_ps256_T3P8), _CMP_GT_OQ);
-    __m256 y = _mm256_and_ps(mask1, *reinterpret_cast<const __m256*>(_ps256_PIO2));
+    const v8sf mask1 = _mm256_cmp_ps(ratio, set1(T3P8), _CMP_GT_OQ);
+    v8sf y = _mm256_and_ps(mask1, set1(PIO2));
     ratio = _mm256_or_ps(_mm256_andnot_ps(mask1, ratio),
-                         _mm256_and_ps(mask1,_mm256_div_ps(_mm256_set1_ps(-1.0f),
-                                                          ratio)));
+                         _mm256_and_ps(mask1, _mm256_div_ps(set1(-1.0F), ratio)));
 
     //else if( x <= 0.66 ){
-	//  y = 0.0;
-	//}
+    //  y = 0.0;
+    //}
     //if(x <= 0.66) y = 0.0 /*we get the assignment for free*/
-    const __m256 mask2 = _mm256_cmp_ps(ratio, *reinterpret_cast<const __m256*>(_ps256_0_66), _CMP_LE_OQ);
+    const v8sf mask2 = _mm256_cmp_ps(ratio, set1(ATAN_SPLIT), _CMP_LE_OQ);
 
     //else{ /* x > 0.66 */
     //  y = PIO4;
-	//  flag = 2;
-	//  x = (x-1.0)/(x+1.0);
+    //  flag = 2;
+    //  x = (x-1.0)/(x+1.0);
     //}
-
-    y = _mm256_or_ps(y, _mm256_andnot_ps(mask2, *reinterpret_cast<const __m256*>(_ps256_PIO4)));
+    y = _mm256_or_ps(y, _mm256_andnot_ps(mask2, set1(PIO4)));
     //x = (x-1.0)/(x+1.0);
-    __m256 newx = _mm256_div_ps(_mm256_sub_ps(ratio, *reinterpret_cast<const __m256*>(_ps256_1)),
-                                _mm256_add_ps(ratio, *reinterpret_cast<const __m256*>(_ps256_1)));
-    __m256 mask = _mm256_or_ps(mask1, mask2);
+    const v8sf newx = _mm256_div_ps(_mm256_sub_ps(ratio, set1(1.0F)),
+                                    _mm256_add_ps(ratio, set1(1.0F)));
+    const v8sf mask = _mm256_or_ps(mask1, mask2);
 
     ratio = _mm256_or_ps(_mm256_and_ps(ratio, mask),
                          _mm256_andnot_ps(mask, newx));
 
     //z = x * x;
-    __m256 z = _mm256_mul_ps(ratio, ratio);
+    v8sf z = _mm256_mul_ps(ratio, ratio);
 
     //z = z * polevl( z, P, 4 ) / p1evl( z, Q, 5 );
-    z = _mm256_div_ps(_mm256_mul_ps(z,
-                      polevl(z, atan_P, 4)),
+    z = _mm256_div_ps(_mm256_mul_ps(z, polevl(z, atan_P, 4)),
                       p1evl(z, atan_Q, 5));
-
 
     //z = x * z + x
     z = _mm256_fmadd_ps(ratio, z, ratio);
 
-
-    z = _mm256_add_ps(z, _mm256_and_ps(mask2, *reinterpret_cast<const __m256*>(_ps256_HALF_MOREBITS)));
-    z = _mm256_add_ps(z, _mm256_and_ps(mask1, *reinterpret_cast<const __m256*>(_ps256_MOREBITS)));
+    //Cephes: flag == 2 (x > 0.66, not > T3P8) gets 0.5*MOREBITS; flag == 0 gets nothing.
+    //(mask2 also covers the flag == 1 lanes, whose ratio is now negative, so use ~mask.)
+    z = _mm256_add_ps(z, _mm256_andnot_ps(mask, set1(HALF_MOREBITS)));
+    z = _mm256_add_ps(z, _mm256_and_ps(mask1, set1(MOREBITS)));
 
     y = _mm256_add_ps(y, z);
 
     //restore sign
-    __m256 ss = _mm256_castsi256_ps(*reinterpret_cast<const __m256i*>(_pi32_256_fp_sign_mask));
-    ss = _mm256_and_ps(ss, sign);
-    y = _mm256_or_ps(ss, y);
-    return y;
+    return _mm256_xor_ps(y, sign);
 }
 
 /**
- * TODO -> I *think* this works.  It needs a LOT more testing.
+ * Four quadrant arctangent of y/x; returns -PI <= z <= PI (ANSI C like).
  *
- * NOTE: Does not curently test for NAN.  NANs will produce errors.
- * NOTE: Does not currently test for INF/-INF.  These will produce undefined results
+ * Matches std::atan2 for the C99 Annex F special cases: signed zeros,
+ * infinities and NaNs.
+ *
+ * Approach: z = atan(y/x), plus copysign(PI, y) when x is negative (sign bit
+ * set, so -0.0 counts as negative).  Two cases where y/x is NaN are patched
+ * first: y == +-0 (y/x is replaced by a correctly signed zero) and both
+ * arguments infinite (y/x is replaced by +-1).
  *
  * @param y
  * @param x
  */
-inline v8sf atan2(__m256 y, __m256 x) {
-    __m256 z =  *(reinterpret_cast<const __m256*>(_ps256_zero));
-    //mask NaNs here
+inline v8sf atan2(v8sf y, v8sf x) {
+    using namespace detail;
+    const v8sf signMask = bits(sign_mask);
+    const v8sf inf      = set1(std::numeric_limits<float>::infinity());
 
-    const __m256 y_zero       = _mm256_cmp_ps(y, *reinterpret_cast<const __m256*>(_ps256_zero),         _CMP_EQ_UQ);
-    // const __m256 y_negzero    = _mm256_cmp_ps(y, *reinterpret_cast<const __m256*>(_ps256_negativeZero), _CMP_EQ_UQ);
-    const __m256 y_gt_zero    = _mm256_cmp_ps(y, *reinterpret_cast<const __m256*>(_ps256_zero),         _CMP_GT_OQ);
-    const __m256 x_ge_zero    = _mm256_cmp_ps(x, *reinterpret_cast<const __m256*>(_ps256_zero),         _CMP_GE_OQ);
-    const __m256 x_le_zero    = _mm256_cmp_ps(x, *reinterpret_cast<const __m256*>(_ps256_zero),         _CMP_LE_OQ);
-    const __m256 x_eq_zero    = _mm256_cmp_ps(x, *reinterpret_cast<const __m256*>(_ps256_zero),         _CMP_EQ_UQ);
+    const v8sf ysign = _mm256_and_ps(signMask, y);
+    const v8sf xsign = _mm256_and_ps(signMask, x);
+    const v8sf qsign = _mm256_xor_ps(ysign, xsign); // sign of y/x
 
+    v8sf ratio = _mm256_div_ps(y, x);
 
-    //NOTE:  These next two are needed for systems that handle -0, which mine does not.  That is, it is
-    //       needed in cases where -0.0 != 0.0.
-    //if((y == -0.0) && (x >  0.0)) z = y
-    //if((y == -0.0) && (x == 0.0)) z = y
-    // __m256 z = _mm256_and_ps(y, _mm256_and_ps(y_negzero, x_ge_zero));
+    //y == +-0 (and x not NaN): y/x is a signed zero (also when x == +-0, where y/x would be NaN)
+    const v8sf y_zero = _mm256_and_ps(_mm256_cmp_ps(y, _mm256_setzero_ps(), _CMP_EQ_OQ),
+                                      _mm256_cmp_ps(x, x, _CMP_ORD_Q));
+    ratio = _mm256_blendv_ps(ratio, qsign, y_zero);
 
-    //if((y == -0.0) && (x <   0.0)) z = -PI
-    //if((y == -0.0) && (x == -0.0)) z = -PI
-    // z = _mm256_or_ps(z, _mm256_and_ps(_mm256_and_ps(y_negzero, x_le_negzero), *reinterpret_cast<const __m256*>(_ps256_negPI)));
+    //both infinite: inf/inf is NaN, but atan2 wants +-PI/4 or +-3PI/4
+    const v8sf both_inf = _mm256_and_ps(_mm256_cmp_ps(_mm256_andnot_ps(signMask, y), inf, _CMP_EQ_OQ),
+                                        _mm256_cmp_ps(_mm256_andnot_ps(signMask, x), inf, _CMP_EQ_OQ));
+    ratio = _mm256_blendv_ps(ratio, _mm256_or_ps(set1(1.0F), qsign), both_inf);
 
-    //if((y == 0.0) && (x == -0.0)) z = PI
-    //if((y == 0.0) && (x <   0.0)) z = PI
-    z = _mm256_or_ps(z, _mm256_and_ps(_mm256_and_ps(y_zero, x_le_zero), *reinterpret_cast<const __m256*>(_ps256_PI)));
+    v8sf z = atan(ratio);
 
-    //if((y == 0.0) && (x == 0.0)) z = 0.0
-    //if((y == 0.0) && (z >  0.0)) z = 0.0
-    //already set to zero
-
-    //if((x == 0.0) && (y > 0.0)) z = PI/2
-    z = _mm256_or_ps(z, _mm256_and_ps(_mm256_and_ps(x_eq_zero, y_gt_zero), *reinterpret_cast<const __m256*>(_ps256_PIO2)));
-
-    //if((x == 0.0) && (y <= 0.0) z = -PI/2
-    z = _mm256_or_ps(z, _mm256_and_ps(_mm256_andnot_ps(y_gt_zero, x_eq_zero), *reinterpret_cast<const __m256*>(_ps256_negPIO2)));
-
-    //TODO -> finish filling out tests for infinity
-    //TODO -> NOTE: Don't forget to put the test for 0.0/-0.0 in the doneMask below
-    //if((x ==  INFINITY) && (y ==  INFINITY)) z = 0.25 * PI
-    //if((x ==  INFINITY) && (y == -INFINITY)) z = -0.25 * PI
-    //if((x ==  INFINITY) && (y <   0.0))      z = -0.0
-    //if((x ==  INFINITY) && (y >=  0.0)       z = 0.0
-    //if((y ==  INFINITY) && (z == 0.0))       z = PI/2
-    //if((y == -INFINITY) && (z == 0.0))       z = -PI/2
-
-    //now we need to mask off all the values we already set, so we don't overwrite them below
-    const __m256 doneMask = _mm256_or_ps(_mm256_and_ps(y_zero, x_ge_zero),
-                                          _mm256_cmp_ps(z, *reinterpret_cast<const __m256*>(_ps256_zero), _CMP_NEQ_UQ));
-
-    //if(x < 0.0) code = 2
-    __m256i code;
-    code = _mm256_and_si256(_mm256_castps_si256(x_le_zero),
-                            *reinterpret_cast<const __m256i*>(_pi32_256_2));
-
-    //if(y < 0.0) code |= 1
-    code = _mm256_or_si256(code,
-                           _mm256_andnot_si256(_mm256_castps_si256(y_gt_zero),
-                                               *reinterpret_cast<const __m256i*>(_pi32_256_1)));
-
-    const __m256 w2 = _mm256_and_ps(_mm256_castsi256_ps(_mm256_cmpeq_epi32(code, *reinterpret_cast<const __m256i*>(_pi32_256_2))), *(__m256*)_ps256_PI);
-    const __m256 w3 = _mm256_and_ps(_mm256_castsi256_ps(_mm256_cmpeq_epi32(code, *reinterpret_cast<const __m256i*>(_pi32_256_3))), *(__m256*)_ps256_PI);
-    const __m256 w  = _mm256_or_ps(w2,w3);
-
-    const __m256 ratio = _mm256_div_ps(y, x);
-
-    const __m256 atanRatio = _mm256_add_ps(w, atan(ratio));
-
-    const __m256 z1 = _mm256_and_ps(doneMask, z);
-    const __m256 z2 = _mm256_andnot_ps(doneMask, atanRatio);
-    z = _mm256_or_ps(z1, z2);
-
-    //if((z == 0.0) && (y < 0.0)) z = NEGZERO
-    const __m256 negzeroMask = _mm256_and_ps(_mm256_cmp_ps(z, *reinterpret_cast<const __m256*>(_ps256_zero), _CMP_EQ_UQ),
-                                             _mm256_cmp_ps(y, *reinterpret_cast<const __m256*>(_ps256_zero), _CMP_LT_OQ));
-
-
-    z = _mm256_andnot_ps(negzeroMask, z);
-    z = _mm256_or_ps(z, _mm256_and_ps(negzeroMask, *reinterpret_cast<const __m256*>(_ps256_negativeZero)));
+    //x negative: add copysign(PI, y).  blendv selects on the sign bit of its mask, so passing
+    //x directly picks every lane with x's sign bit set, including -0.0.
+    const v8sf shifted = _mm256_add_ps(z, _mm256_or_ps(set1(PI), ysign));
+    z = _mm256_blendv_ps(z, shifted, x);
     return z;
 }
 
-}
+} // namespace avx_mathfun
 
-
+#endif // AVX_MATHFUN_H

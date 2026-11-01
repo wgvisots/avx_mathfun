@@ -1,6 +1,9 @@
 .idea
 build
 
+# CTest output
+Testing/
+
 # Prerequisites
 *.d
 
